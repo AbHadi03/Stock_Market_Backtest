@@ -179,6 +179,7 @@ if st.button("Run Backtest", type="primary"):
                 trade = {
                     "Stock": SELECTED_STOCK,
                     "entry_date": row["Date"],
+                    "entry_rsi": row["RSI"],
                     "entry_price": entry_price,
                     "quantity": quantity,
                     "target_price": entry_price * (1 + TARGET_PCT),
@@ -250,7 +251,7 @@ if st.button("Run Backtest", type="primary"):
             display_df = trades_df.copy()
             display_df['entry_date'] = display_df['entry_date'].dt.date
             display_df['exit_date'] = display_df['exit_date'].dt.date
-            cols_to_show = ['Stock', 'entry_date', 'entry_price', 'quantity', 'exit_date', 'exit_price', 'holding_days', 'charges', 'pnl', 'cum_pnl']
+            cols_to_show = ['Stock', 'entry_date', 'entry_rsi', 'entry_price', 'quantity', 'exit_date', 'exit_price', 'holding_days', 'charges', 'pnl', 'cum_pnl']
             st.dataframe(display_df[cols_to_show], width='stretch')
 
             # --- Analysis Charts ---
