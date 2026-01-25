@@ -113,19 +113,21 @@ with col_s2:
     END_DATE = st.date_input("End Date", value=datetime.today(), max_value=datetime.today())
 
 with col_s3:
-    SELECTED_STOCK = st.text_input("Stock Name", value="RELIANCE.NS", help="Enter stock symbol with .NS extension (e.g. TCS.NS)")
+    SELECTED_STOCK = st.text_input("Stock Name", value="RELIANCE", help="Enter stock symbol (e.g. TCS, INFY)")
 
 # --- Run Backtest ---
 if st.button("Run Backtest", type="primary"):
+    # Auto-append .NS if not present
+    SELECTED_STOCK = SELECTED_STOCK.upper().strip()
     if not SELECTED_STOCK.endswith(".NS"):
-        st.error(f"Invalid Stock Name '{SELECTED_STOCK}'. Please enter a valid stock symbol ending with '.NS' (e.g., TCS.NS, RELIANCE.NS).")
-        st.stop()
+        SELECTED_STOCK += ".NS"
         
     st.info(f"Fetching data for {SELECTED_STOCK} from {START_DATE} to {END_DATE}...")
     
     try:
-        # Fetch Data
-        df = yf.download(SELECTED_STOCK, start=START_DATE, end=END_DATE, progress=False)
+        # Fetch Data (with 365 days buffer for RSI calculation)
+        fetch_start_date = START_DATE - timedelta(days=365)
+        df = yf.download(SELECTED_STOCK, start=fetch_start_date, end=END_DATE, progress=False)
         
         if df.empty:
             st.error("No data fetched from Yahoo Finance. Please check inputs.")
@@ -146,6 +148,10 @@ if st.button("Run Backtest", type="primary"):
 
         # Calculate RSI
         df["RSI"] = calculate_rsi(df["Close"], RSI_PERIOD)
+
+        # Filter data to match the user's selected Start Date
+        df = df[df["Date"] >= pd.to_datetime(START_DATE)]
+        df = df.reset_index(drop=True)
 
         # Backtest Logic
         all_trades = []
