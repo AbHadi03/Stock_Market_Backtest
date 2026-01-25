@@ -110,19 +110,17 @@ col_s1, col_s2, col_s3 = st.columns(3)
 with col_s1:
     START_DATE = st.date_input("Start Date", value=datetime.today() - timedelta(days=365*3))
 with col_s2:
-    END_DATE = st.date_input("End Date", value=datetime.today())
+    END_DATE = st.date_input("End Date", value=datetime.today(), max_value=datetime.today())
 
 with col_s3:
-    # Top 10 Indian Stocks (Market Cap approximate)
-    STOCK_LIST = [
-        "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", 
-        "ICICIBANK.NS", "HINDUNILVR.NS", "ITC.NS", "SBIN.NS", 
-        "BHARTIARTL.NS", "KOTAKBANK.NS"
-    ]
-    SELECTED_STOCK = st.selectbox("Stock Name", STOCK_LIST)
+    SELECTED_STOCK = st.text_input("Stock Name", value="RELIANCE.NS", help="Enter stock symbol with .NS extension (e.g. TCS.NS)")
 
 # --- Run Backtest ---
 if st.button("Run Backtest", type="primary"):
+    if not SELECTED_STOCK.endswith(".NS"):
+        st.error(f"Invalid Stock Name '{SELECTED_STOCK}'. Please enter a valid stock symbol ending with '.NS' (e.g., TCS.NS, RELIANCE.NS).")
+        st.stop()
+        
     st.info(f"Fetching data for {SELECTED_STOCK} from {START_DATE} to {END_DATE}...")
     
     try:
@@ -230,19 +228,43 @@ if st.button("Run Backtest", type="primary"):
             cashflow_df = pd.DataFrame(cashflows, columns=["date", "cashflow"]).sort_values("date")
             xirr = calculate_xirr(cashflow_df)
 
+            # --- Current Investment in Open Trades ---
+            open_trades_value = 0
+            if open_trades:
+                open_trades_value = len(open_trades) * INVESTMENT_PER_TRADE
+
+
             # --- Dashboard ---
             st.subheader(f"Performance: {SELECTED_STOCK}")
+            
+            # TradingView Link
+            tv_symbol = SELECTED_STOCK.replace(".NS", "")
+            tv_url = f"https://www.tradingview.com/chart/?symbol=NSE%3A{tv_symbol}"
+            st.link_button("View Chart on TradingView", tv_url)
+            
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Trades", total_trades)
             m2.metric("Total Charges", f"₹{total_charges:,.2f}")
             m3.metric("Net P&L", f"₹{net_pnl:,.2f}", delta_color="normal" if net_pnl >= 0 else "inverse")
             m4.metric("Win Rate", f"{win_rate:.2f}%")
             
-            m5, m6, m7 = st.columns(3)
+            m5, m6, m7, m8 = st.columns(4)
             m5.metric("Avg Holding Days", f"{avg_holding_days:.2f} Days")
             m6.metric("Max Capital Deployed", f"₹{max_capital:,.2f}")
             m7.metric("Strategy XIRR", f"{xirr * 100:.2f}%")
+            m8.metric("Current Investment", f"₹{open_trades_value:,.2f}")
             
+            
+            # --- Open Trades ---
+            st.subheader("Open Trades")
+            if open_trades:
+                open_trades_df = pd.DataFrame(open_trades)
+                # Keep relevant columns
+                open_cols = ['Stock', 'entry_date', 'entry_rsi', 'entry_price', 'quantity', 'target_price']
+                st.dataframe(open_trades_df[open_cols], width='stretch')
+            else:
+                st.info("No trades are currently open.")
+
             st.markdown("---")
             
             # --- Trade History with Cumulative PnL ---
