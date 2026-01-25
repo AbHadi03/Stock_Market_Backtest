@@ -30,6 +30,12 @@ else:
     - Buys when RSI drops below a certain threshold (oversold).
     - Sells one a target percentage is reached.
     - Calculates P&L, Win Rate, and XIRR.
+
+    **2. Equity RSI Trade (Stock-wise)**
+    - Same RSI strategy but focused on single stock analysis.
+    - Fetches live data from Yahoo Finance.
+    - Allows custom date range backtesting.
+    - Provides detailed trade history and capital deployment analysis.
     
     #### How it works:
     1. Navigate to the strategy page from the sidebar.
