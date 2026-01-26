@@ -3,9 +3,38 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 from datetime import datetime, timedelta
+import yfinance as yf
+from datetime import datetime, timedelta
 import altair as alt
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+
+# --- Helper Functions ---
+def calculate_xirr(cashflow_df):
+    if cashflow_df.empty:
+        return 0.0
+    dates = cashflow_df["date"]
+    amounts = cashflow_df["cashflow"]
+
+    def npv(rate):
+        return sum(
+            amt / ((1 + rate) ** ((d - dates.iloc[0]).days / 365))
+            for amt, d in zip(amounts, dates)
+        )
+
+    low, high = -0.99, 10.0
+    for _ in range(100):
+        mid = (low + high) / 2
+        try:
+            val = npv(mid)
+        except OverflowError:
+             val = float('inf')
+        
+        if abs(val) < 1e-6:
+            return mid
+        if val > 0:
+            low = mid
+        else:
+            high = mid
+    return mid
 
 # --- Page Config ---
 st.set_page_config(layout="wide", page_title="Paisa Double Strategy", page_icon="💰")
@@ -107,9 +136,13 @@ if st.button("Run Backtest", type="primary"):
         # State variables
         current_investment = INITIAL_INVESTMENT
         position = None # None or dict
-        total_pnl = 0
         total_charges = 0
         cycles_completed = 0
+        current_cycle = 1 # Start with Cycle 1
+        
+        # Track max investment
+        max_investment_used = 0
+        max_inv_cycle = 0
         
         # Find start index
         start_date_ts = pd.to_datetime(START_DATE)
@@ -160,7 +193,10 @@ if st.button("Run Backtest", type="primary"):
                     total_pnl += pnl
                     total_charges += CHARGES_PER_TRADE
                     
+                    duration = (current_date - position['entry_date']).days
+                    
                     results.append({
+                        'Cycle': position['cycle_number'],
                         'Entry Date': position['entry_date'],
                         'Exit Date': current_date,
                         'Symbol': SELECTED_STOCK,
@@ -170,7 +206,8 @@ if st.button("Run Backtest", type="primary"):
                         'Quantity': position['quantity'],
                         'Invested': position['invested_amount'],
                         'PnL': pnl,
-                        'Cumulative PnL': total_pnl
+                        'Cumulative PnL': total_pnl,
+                        'Duration (Days)': duration
                     })
                     
                     # Next Investment Logic
@@ -178,6 +215,7 @@ if st.button("Run Backtest", type="primary"):
                         # Reset cycle
                         current_investment = INITIAL_INVESTMENT
                         cycles_completed += 1
+                        current_cycle += 1 # New cycle starts
                     else:
                         # SL Hit -> Martingale
                         current_investment *= MULTIPLIER
@@ -186,7 +224,12 @@ if st.button("Run Backtest", type="primary"):
                     
             # 2. Open New Position (if none open)
             elif not position:
-                # Buy at Close of this candle (simulating filling at close or next open)
+                # Update Max Investment
+                if current_investment > max_investment_used:
+                    max_investment_used = current_investment
+                    max_inv_cycle = current_cycle
+
+                # Buy at Close of this candle
                 # Strategy says "buy ... on next day close price". 
                 # So if we exited today, we are effectively flat. 
                 # We can enter TODAY's Close for the NEXT trade, 
@@ -199,7 +242,8 @@ if st.button("Run Backtest", type="primary"):
                     'entry_date': current_date,
                     'entry_price': entry_price,
                     'quantity': quantity,
-                    'invested_amount': current_investment
+                    'invested_amount': current_investment,
+                    'cycle_number': current_cycle
                 }
         
         # Capture open position at end
@@ -220,17 +264,33 @@ if st.button("Run Backtest", type="primary"):
         win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0
         
         net_profit = results_df['PnL'].sum() if not results_df.empty else 0
-        roi = (net_profit / INITIAL_INVESTMENT) * 100 # ROI on initial capital base
+        roi = (net_profit / max_investment_used) * 100 if max_investment_used > 0 else 0
         
+        # XIRR
+        cashflows = []
+        if not results_df.empty:
+            for _, row_res in results_df.iterrows():
+                # Outflow: Entry (Technically happening at Entry Date)
+                cashflows.append((row_res["Entry Date"], -row_res["Invested"]))
+                # Inflow: Exit (gross value - charges)
+                exit_val = (row_res["Quantity"] * row_res["Exit Price"]) - CHARGES_PER_TRADE
+                cashflows.append((row_res["Exit Date"], exit_val))
+            
+            cashflow_df = pd.DataFrame(cashflows, columns=["date", "cashflow"]).sort_values("date")
+            xirr = calculate_xirr(cashflow_df)
+        else:
+            xirr = 0.0
+
         col_m1.metric("Total PnL", f"₹{net_profit:,.2f}", delta_color="normal" if net_profit >= 0 else "inverse")
         col_m2.metric("Total Trades", total_trades)
-        col_m3.metric("Win Rate", f"{win_rate:.1f}%")
-        col_m4.metric("ROI (on Base)", f"{roi:.1f}%")
+        col_m3.metric("XIRR", f"{xirr * 100:.2f}%")
+        col_m4.metric("ROI (on Max Inv)", f"{roi:.1f}%")
         
-        col_m5, col_m6, col_m7 = st.columns(3)
+        col_m5, col_m6, col_m7, col_m8 = st.columns(4)
         col_m5.metric("Cycles Completed", cycles_completed)
-        col_m6.metric("Current Investment Requirement", f"₹{current_investment:,.2f}")
-        col_m7.metric("Open Position Value", f"₹{open_trade_val:,.2f}" if position else "₹0.00")
+        col_m6.metric("Max Investment", f"₹{max_investment_used:,.2f} (Cycle {max_inv_cycle})")
+        col_m7.metric("Current Req.", f"₹{current_investment:,.2f}")
+        col_m8.metric("Open Value", f"₹{open_trade_val:,.2f}" if position else "₹0.00")
 
         # TradingView Link
         tv_symbol = SELECTED_STOCK.replace(".NS", "")
@@ -247,12 +307,20 @@ if st.button("Run Backtest", type="primary"):
             # Sort by Entry Date
             results_df = results_df.sort_values("Entry Date")
             
-            # Format
+            # Filter by Cycle
+            all_cycles = sorted(results_df['Cycle'].unique())
+            cycle_filter = st.multiselect("Filter by Cycle Number", all_cycles)
+            
             display_df = results_df.copy()
+            if cycle_filter:
+                display_df = display_df[display_df['Cycle'].isin(cycle_filter)]
+            
+            # Format
             display_df['Entry Date'] = display_df['Entry Date'].dt.date
             display_df['Exit Date'] = display_df['Exit Date'].dt.date
             
-            st.dataframe(display_df, width='stretch')
+            cols_to_show = ['Cycle', 'Entry Date', 'Exit Date', 'Symbol', 'Action', 'Entry Price', 'Exit Price', 'Quantity', 'Invested', 'PnL', 'Cumulative PnL', 'Duration (Days)']
+            st.dataframe(display_df[cols_to_show], width='stretch')
             
             # 2. Charts
             col_c1, col_c2 = st.columns(2)
@@ -266,43 +334,6 @@ if st.button("Run Backtest", type="primary"):
             with col_c2:
                 st.subheader("Investment Size Progression")
                 st.bar_chart(results_df, x='Entry Date', y='Invested')
-                
-            # 3. Plotly Candle Chart with Buy/Sell
-            st.subheader("Price Chart & Trade Points")
-            
-            fig = make_subplots(rows=1, cols=1)
-            
-            # Candle
-            fig.add_trace(go.Candlestick(
-                x=df_slice['Date'],
-                open=df_slice['Open'],
-                high=df_slice['High'],
-                low=df_slice['Low'],
-                close=df_slice['Close'],
-                name='Price'
-            ))
-            
-            # Markers
-            entries = results_df[['Entry Date', 'Entry Price']].copy()
-            exits_tp = results_df[results_df['Action']=='TAKE PROFIT'][['Exit Date', 'Exit Price']]
-            exits_sl = results_df[results_df['Action']=='STOP LOSS'][['Exit Date', 'Exit Price']]
-            
-            fig.add_trace(go.Scatter(
-                x=entries['Entry Date'], y=entries['Entry Price'],
-                mode='markers', name='Entry', marker=dict(color='blue', symbol='triangle-up', size=10)
-            ))
-            fig.add_trace(go.Scatter(
-                x=exits_tp['Exit Date'], y=exits_tp['Exit Price'],
-                mode='markers', name='Take Profit', marker=dict(color='green', symbol='circle', size=10)
-            ))
-            fig.add_trace(go.Scatter(
-                x=exits_sl['Exit Date'], y=exits_sl['Exit Price'],
-                mode='markers', name='Stop Loss', marker=dict(color='red', symbol='x', size=10)
-            ))
-            
-            fig.update_layout(xaxis_rangeslider_visible=False, height=600)
-            st.plotly_chart(fig, width='stretch')
-            
         else:
             st.warning("No trades generated with the current parameters.")
 
