@@ -121,6 +121,7 @@ if st.button("Run Backtest", type="primary"):
         
         if df.empty:
             st.error("No data fetched from Yahoo Finance. Please check inputs.")
+            st.session_state.p3_results = None
             st.stop()
 
         # Handle MultiIndex columns if present
@@ -143,6 +144,7 @@ if st.button("Run Backtest", type="primary"):
         # Track max investment
         max_investment_used = 0
         max_inv_cycle = 0
+        total_pnl = 0
         
         # Find start index
         start_date_ts = pd.to_datetime(START_DATE)
@@ -150,6 +152,7 @@ if st.button("Run Backtest", type="primary"):
         
         if df_slice.empty:
              st.error("No data available for the selected date range.")
+             st.session_state.p3_results = None
              st.stop()
 
         # Iterate day by day
@@ -185,9 +188,7 @@ if st.button("Run Backtest", type="primary"):
                 if exit_action:
                     # Execute Exit
                     gross_val = position['quantity'] * exit_price
-                    # We deduct charges once per "trade cycle" (Entry + Exit combined in input? 
-                    # Prompt said "take it in the input and deduct it in trades". 
-                    # Assuming CHARGES_PER_TRADE is total for the round trip.)
+                    # We deduct charges once per "trade cycle"
                     
                     pnl = gross_val - position['invested_amount'] - CHARGES_PER_TRADE
                     total_pnl += pnl
@@ -230,10 +231,6 @@ if st.button("Run Backtest", type="primary"):
                     max_inv_cycle = current_cycle
 
                 # Buy at Close of this candle
-                # Strategy says "buy ... on next day close price". 
-                # So if we exited today, we are effectively flat. 
-                # We can enter TODAY's Close for the NEXT trade, 
-                # effectively carrying the position overnight starting today.
                 
                 entry_price = close_price
                 quantity = current_investment / entry_price
@@ -248,95 +245,115 @@ if st.button("Run Backtest", type="primary"):
         
         # Capture open position at end
         open_trade_val = 0
+        last_trade_position = None
         if position:
             open_trade_val = position['quantity'] * df_slice.iloc[-1]['Close']
+            last_trade_position = position
         
-        # --- Results Processing ---
+        # --- Store in Session State ---
         results_df = pd.DataFrame(results)
         
-        st.header(f"Performance: {SELECTED_STOCK}")
-        
-        # Metrics
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        total_trades = len(results_df)
-        win_count = len(results_df[results_df['Action'] == 'TAKE PROFIT'])
-        loss_count = len(results_df[results_df['Action'] == 'STOP LOSS'])
-        win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0
-        
-        net_profit = results_df['PnL'].sum() if not results_df.empty else 0
-        roi = (net_profit / max_investment_used) * 100 if max_investment_used > 0 else 0
-        
-        # XIRR
-        cashflows = []
-        if not results_df.empty:
-            for _, row_res in results_df.iterrows():
-                # Outflow: Entry (Technically happening at Entry Date)
-                cashflows.append((row_res["Entry Date"], -row_res["Invested"]))
-                # Inflow: Exit (gross value - charges)
-                exit_val = (row_res["Quantity"] * row_res["Exit Price"]) - CHARGES_PER_TRADE
-                cashflows.append((row_res["Exit Date"], exit_val))
-            
-            cashflow_df = pd.DataFrame(cashflows, columns=["date", "cashflow"]).sort_values("date")
-            xirr = calculate_xirr(cashflow_df)
-        else:
-            xirr = 0.0
-
-        col_m1.metric("Total PnL", f"₹{net_profit:,.2f}", delta_color="normal" if net_profit >= 0 else "inverse")
-        col_m2.metric("Total Trades", total_trades)
-        col_m3.metric("XIRR", f"{xirr * 100:.2f}%")
-        col_m4.metric("ROI (on Max Inv)", f"{roi:.1f}%")
-        
-        col_m5, col_m6, col_m7, col_m8 = st.columns(4)
-        col_m5.metric("Cycles Completed", cycles_completed)
-        col_m6.metric("Max Investment", f"₹{max_investment_used:,.2f} (Cycle {max_inv_cycle})")
-        col_m7.metric("Current Req.", f"₹{current_investment:,.2f}")
-        col_m8.metric("Open Value", f"₹{open_trade_val:,.2f}" if position else "₹0.00")
-
-        # TradingView Link
-        tv_symbol = SELECTED_STOCK.replace(".NS", "")
-        tv_url = f"https://www.tradingview.com/chart/?symbol=NSE%3A{tv_symbol}"
-        st.link_button("View Chart on TradingView", tv_url)
-        
-        st.markdown("---")
-        
-        if not results_df.empty:
-            # Tables and Charts
-            
-            # 1. Trade History
-            st.subheader("Trade History")
-            # Sort by Entry Date
-            results_df = results_df.sort_values("Entry Date")
-            
-            # Filter by Cycle
-            all_cycles = sorted(results_df['Cycle'].unique())
-            cycle_filter = st.multiselect("Filter by Cycle Number", all_cycles)
-            
-            display_df = results_df.copy()
-            if cycle_filter:
-                display_df = display_df[display_df['Cycle'].isin(cycle_filter)]
-            
-            # Format
-            display_df['Entry Date'] = display_df['Entry Date'].dt.date
-            display_df['Exit Date'] = display_df['Exit Date'].dt.date
-            
-            cols_to_show = ['Cycle', 'Entry Date', 'Exit Date', 'Symbol', 'Action', 'Entry Price', 'Exit Price', 'Quantity', 'Invested', 'PnL', 'Cumulative PnL', 'Duration (Days)']
-            st.dataframe(display_df[cols_to_show], width='stretch')
-            
-            # 2. Charts
-            col_c1, col_c2 = st.columns(2)
-            
-            with col_c1:
-                st.subheader("Equity Curve")
-                equity_df = results_df[['Exit Date', 'Cumulative PnL']].copy()
-                equity_df = equity_df.rename(columns={'Exit Date': 'Date'})
-                st.line_chart(equity_df, x='Date', y='Cumulative PnL')
-                
-            with col_c2:
-                st.subheader("Investment Size Progression")
-                st.bar_chart(results_df, x='Entry Date', y='Invested')
-        else:
-            st.warning("No trades generated with the current parameters.")
+        st.session_state.p3_results = {
+            'results_df': results_df,
+            'max_investment_used': max_investment_used,
+            'max_inv_cycle': max_inv_cycle,
+            'cycles_completed': cycles_completed,
+            'current_investment': current_investment,
+            'open_trade_val': open_trade_val,
+            'selected_stock': SELECTED_STOCK,
+            'position': last_trade_position
+        }
 
     except Exception as e:
         st.error(f"An error occurred: {e}")
-        # st.exception(e)
+        st.session_state.p3_results = None
+
+# --- Display Results from Session State ---
+if 'p3_results' in st.session_state and st.session_state.p3_results:
+    data = st.session_state.p3_results
+    results_df = data['results_df']
+    max_investment_used = data['max_investment_used']
+    max_inv_cycle = data['max_inv_cycle']
+    cycles_completed = data['cycles_completed']
+    current_investment = data['current_investment']
+    open_trade_val = data['open_trade_val']
+    stock_symbol = data['selected_stock']
+    position = data['position']
+    
+    st.header(f"Performance: {stock_symbol}")
+    
+    # Metrics
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    total_trades = len(results_df)
+    win_count = len(results_df[results_df['Action'] == 'TAKE PROFIT']) if not results_df.empty else 0
+    loss_count = len(results_df[results_df['Action'] == 'STOP LOSS']) if not results_df.empty else 0
+    win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0
+    
+    net_profit = results_df['PnL'].sum() if not results_df.empty else 0
+    roi = (net_profit / max_investment_used) * 100 if max_investment_used > 0 else 0
+    
+    # XIRR
+    xirr = 0.0
+    if not results_df.empty:
+        cashflows = []
+        for _, row_res in results_df.iterrows():
+            cashflows.append((row_res["Entry Date"], -row_res["Invested"]))
+            exit_val = (row_res["Quantity"] * row_res["Exit Price"]) - CHARGES_PER_TRADE
+            cashflows.append((row_res["Exit Date"], exit_val))
+        
+        cashflow_df = pd.DataFrame(cashflows, columns=["date", "cashflow"]).sort_values("date")
+        xirr = calculate_xirr(cashflow_df)
+
+    col_m1.metric("Total PnL", f"₹{net_profit:,.2f}", delta_color="normal" if net_profit >= 0 else "inverse")
+    col_m2.metric("Total Trades", total_trades)
+    col_m3.metric("XIRR", f"{xirr * 100:.2f}%")
+    col_m4.metric("ROI (on Max Inv)", f"{roi:.1f}%")
+    
+    col_m5, col_m6, col_m7 = st.columns(3)
+    col_m5.metric("Cycles Completed", cycles_completed)
+    col_m6.metric("Max Investment", f"₹{max_investment_used:,.2f} (Cycle {max_inv_cycle})")
+    col_m7.metric("Open Value", f"₹{open_trade_val:,.2f}" if position else "₹0.00")
+
+    # TradingView Link
+    tv_symbol = stock_symbol.replace(".NS", "")
+    tv_url = f"https://www.tradingview.com/chart/?symbol=NSE%3A{tv_symbol}"
+    st.link_button("View Chart on TradingView", tv_url)
+    
+    st.markdown("---")
+    
+    if not results_df.empty:
+        # Tables and Charts
+        
+        # 1. Trade History
+        st.subheader("Trade History")
+        # Sort by Entry Date
+        results_df = results_df.sort_values("Entry Date")
+        
+        # Filter by Cycle
+        all_cycles = sorted(results_df['Cycle'].unique())
+        cycle_filter = st.multiselect("Filter by Cycle Number", all_cycles)
+        
+        display_df = results_df.copy()
+        if cycle_filter:
+            display_df = display_df[display_df['Cycle'].isin(cycle_filter)]
+        
+        # Format
+        display_df['Entry Date'] = display_df['Entry Date'].dt.date
+        display_df['Exit Date'] = display_df['Exit Date'].dt.date
+        
+        cols_to_show = ['Cycle', 'Entry Date', 'Exit Date', 'Symbol', 'Action', 'Entry Price', 'Exit Price', 'Quantity', 'Invested', 'PnL', 'Cumulative PnL', 'Duration (Days)']
+        st.dataframe(display_df[cols_to_show], width='stretch')
+        
+        st.markdown("---")
+        
+        # 2. Charts (Sequential Layout)
+        
+        st.subheader("Equity Curve")
+        equity_df = results_df[['Exit Date', 'Cumulative PnL']].copy()
+        equity_df = equity_df.rename(columns={'Exit Date': 'Date'})
+        st.line_chart(equity_df, x='Date', y='Cumulative PnL')
+            
+        st.subheader("Investment Size Progression")
+        st.bar_chart(results_df, x='Entry Date', y='Invested')
+    else:
+        st.warning("No trades generated with the current parameters.")
