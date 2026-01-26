@@ -337,6 +337,20 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
         if cycle_filter:
             display_df = display_df[display_df['Cycle'].isin(cycle_filter)]
         
+        # --- Filtered Analytics ---
+        if not display_df.empty:
+            f_total_duration = display_df['Duration (Days)'].sum()
+            f_total_pnl = display_df['PnL'].sum()
+            f_max_inv = display_df['Invested'].max()
+            f_roi = (f_total_pnl / f_max_inv) * 100 if f_max_inv > 0 else 0
+            
+            st.markdown("##### Filtered Data Analytics")
+            fc1, fc2, fc3 = st.columns(3)
+            fc1.metric("Total Duration (Days)", int(f_total_duration))
+            fc2.metric("Total PnL", f"₹{f_total_pnl:,.2f}", delta_color="normal" if f_total_pnl >= 0 else "inverse")
+            fc3.metric("ROI (on Filtered Max Inv)", f"{f_roi:.1f}%")
+            st.write(f"*Filtered Max Investment: ₹{f_max_inv:,.2f}*")
+        
         # Format
         display_df['Entry Date'] = display_df['Entry Date'].dt.date
         display_df['Exit Date'] = display_df['Exit Date'].dt.date
