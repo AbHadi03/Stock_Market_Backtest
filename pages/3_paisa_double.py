@@ -401,83 +401,81 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
             fc3.metric("ROI (on Filtered Max Inv)", f"{f_roi:.1f}%")
             st.write(f"*Filtered Max Investment: ₹{f_max_inv:,.2f}*")
         
-            st.markdown("---")
-            
-            # --- Market Analysis Table ---
-            st.subheader("Market Analysis")
-            
-            # 1. Price Change
-            start_price = df_slice.iloc[0]['Close']
-            end_price = df_slice.iloc[-1]['Close']
-            price_change = end_price - start_price
-            price_change_pct = (price_change / start_price) * 100
-            
-            # 2. Perfect Trade (Min to Max)
-            # Find global min price and its date
-            min_row = df_slice.loc[df_slice['Low'].idxmin()]
-            global_min = min_row['Low']
-            min_date = min_row['Date']
-            
-            # Slice df AFTER min date to find max
-            df_after_min = df_slice[df_slice['Date'] > min_date]
-            
-            if not df_after_min.empty:
-                max_row = df_after_min.loc[df_after_min['High'].idxmax()]
-                global_max_after_min = max_row['High']
-                max_date = max_row['Date']
-                
-                # Perfect Trade ROI
-                quantity_perfect = INITIAL_INVESTMENT / global_min
-                gross_val_perfect = quantity_perfect * global_max_after_min
-                # Assume 1 cycle charges
-                pnl_perfect = gross_val_perfect - INITIAL_INVESTMENT - CHARGES_PER_TRADE 
-                roi_perfect = (pnl_perfect / INITIAL_INVESTMENT) * 100
-            else:
-                global_max_after_min = global_min # No movement after min?
-                max_date = min_date
-                pnl_perfect = 0
-                roi_perfect = 0
-
-            # 3. Buy & Hold
-            quantity_bnh = INITIAL_INVESTMENT / start_price
-            gross_val_bnh = quantity_bnh * end_price
-            pnl_bnh = gross_val_bnh - INITIAL_INVESTMENT - CHARGES_PER_TRADE
-            roi_bnh = (pnl_bnh / INITIAL_INVESTMENT) * 100
-            
-            # Construct DataFrame
-            analysis_data = {
-                "Metric": [
-                    "Lowest Price (Buy Point)", 
-                    "Highest Price (Sell Point)", 
-                    "Perfect Trade (Min -> Max)", 
-                    "Buy & Hold (Start -> End)",
-                    "Price Change (Start -> End)"
-                ],
-                "Value": [
-                    f"₹{global_min:,.2f}",
-                    f"₹{global_max_after_min:,.2f}",
-                    f"PnL: ₹{pnl_perfect:,.2f}",
-                    f"PnL: ₹{pnl_bnh:,.2f}",
-                    f"{price_change_pct:.2f}%"
-                ],
-                "Date/ROI": [
-                    min_date.strftime('%Y-%m-%d'),
-                    max_date.strftime('%Y-%m-%d'),
-                    f"ROI: {roi_perfect:.2f}%",
-                    f"ROI: {roi_bnh:.2f}%",
-                    f"{df_slice.iloc[0]['Date'].date()} to {df_slice.iloc[-1]['Date'].date()}"
-                ]
-            }
-            st.table(pd.DataFrame(analysis_data))
-            
-            st.markdown("---")
-        
         # Format
         display_df['Entry Date'] = display_df['Entry Date'].dt.date
         display_df['Exit Date'] = display_df['Exit Date'].dt.date
         
         cols_to_show = ['Cycle', 'Entry Date', 'Exit Date', 'Symbol', 'Action', 'Entry Price', 'Exit Price', 'Quantity', 'Invested', 'PnL', 'Cumulative PnL', 'Duration (Days)']
         st.dataframe(display_df[cols_to_show], width='stretch')
+        
+        st.markdown("---")
+        
+        # --- Market Analysis Table ---
+        st.subheader("Market Analysis")
+        
+        # 1. Price Change
+        start_price = df_slice.iloc[0]['Close']
+        end_price = df_slice.iloc[-1]['Close']
+        price_change = end_price - start_price
+        price_change_pct = (price_change / start_price) * 100
+        
+        # 2. Perfect Trade (Min to Max)
+        # Find global min price and its date
+        min_row = df_slice.loc[df_slice['Low'].idxmin()]
+        global_min = min_row['Low']
+        min_date = min_row['Date']
+        
+        # Slice df AFTER min date to find max
+        df_after_min = df_slice[df_slice['Date'] > min_date]
+        
+        if not df_after_min.empty:
+            max_row = df_after_min.loc[df_after_min['High'].idxmax()]
+            global_max_after_min = max_row['High']
+            max_date = max_row['Date']
+            
+            # Perfect Trade ROI
+            quantity_perfect = INITIAL_INVESTMENT / global_min
+            gross_val_perfect = quantity_perfect * global_max_after_min
+            # Assume 1 cycle charges
+            pnl_perfect = gross_val_perfect - INITIAL_INVESTMENT - CHARGES_PER_TRADE 
+            roi_perfect = (pnl_perfect / INITIAL_INVESTMENT) * 100
+        else:
+            global_max_after_min = global_min # No movement after min?
+            max_date = min_date
+            pnl_perfect = 0
+            roi_perfect = 0
+
+        # 3. Buy & Hold
+        quantity_bnh = INITIAL_INVESTMENT / start_price
+        gross_val_bnh = quantity_bnh * end_price
+        pnl_bnh = gross_val_bnh - INITIAL_INVESTMENT - CHARGES_PER_TRADE
+        roi_bnh = (pnl_bnh / INITIAL_INVESTMENT) * 100
+        
+        # Construct DataFrame
+        analysis_data = {
+            "Metric": [
+                "Lowest Price (Buy Point)", 
+                "Highest Price (Sell Point)", 
+                "Perfect Trade (Min -> Max)", 
+                "Buy & Hold (Start -> End)",
+                "Price Change (Start -> End)"
+            ],
+            "Value": [
+                f"₹{global_min:,.2f}",
+                f"₹{global_max_after_min:,.2f}",
+                f"PnL: ₹{pnl_perfect:,.2f}",
+                f"PnL: ₹{pnl_bnh:,.2f}",
+                f"{price_change_pct:.2f}%"
+            ],
+            "Date/ROI": [
+                min_date.strftime('%Y-%m-%d'),
+                max_date.strftime('%Y-%m-%d'),
+                f"ROI: {roi_perfect:.2f}%",
+                f"ROI: {roi_bnh:.2f}%",
+                f"{df_slice.iloc[0]['Date'].date()} to {df_slice.iloc[-1]['Date'].date()}"
+            ]
+        }
+        st.table(pd.DataFrame(analysis_data))
         
         st.markdown("---")
         
