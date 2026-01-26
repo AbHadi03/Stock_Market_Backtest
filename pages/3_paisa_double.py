@@ -54,6 +54,14 @@ st.markdown("""
 - **Exit - Take Profit**: Sell if price rises by **TP%**. -> **Reset** investment to Initial Amount.
 - **Exit - Stop Loss**: Sell if price drops by **SL%**. -> **Multiply** investment by Multiplier (e.g., 2x) for next trade.
 - **Goal**: Recover losses from previous trades using increased position size, then reset after a win.
+
+
+**रणनीति विवरण (Hindi)**
+- **अवधारणा**: स्टॉक्स पर केवल लॉन्ग (Long-only) स्पॉट ज़रेबंद (Martingale) रणनीति।
+- **प्रविष्टि (Entry)**: शुरू करने की तारीख (या निकास के अगले दिन) के बंद भाव (Close Price) पर खरीदें।
+- **निकास - लाभ लें (Take Profit)**: यदि कीमत **TP%** बढ़ जाती है -> निवेश को प्रारंभिक राशि पर **रीसेट** करें।
+- **निकास - स्टॉप लॉस (Stop Loss)**: यदि कीमत **SL%** गिर जाती है -> अगले व्यापार के लिए निवेश को गुणक (Multiplier) (जैसे, 2x) से **गुणा** करें।
+- **लक्ष्य**: घाटे की भरपाई के लिए स्थिति का आकार (Position Size) बढ़ाएं, और जीत के बाद रीसेट करें।
 """)
 
 # --- Inputs ---
@@ -98,10 +106,50 @@ with col3:
 st.markdown("### Stock Selection")
 col_s1, col_s2, col_s3 = st.columns(3)
 
+# Date Presets logic
+if 'date_preset' not in st.session_state:
+    st.session_state.date_preset = "1 Year"
+
+def update_dates():
+    preset = st.session_state.p3_preset_radio
+    end = datetime.today()
+    if preset == "7 Days":
+        start = end - timedelta(days=7)
+    elif preset == "15 Days":
+        start = end - timedelta(days=15)
+    elif preset == "30 Days":
+        start = end - timedelta(days=30)
+    elif preset == "3 Months":
+        start = end - timedelta(days=90)
+    elif preset == "6 Months":
+        start = end - timedelta(days=180)
+    elif preset == "1 Year":
+        start = end - timedelta(days=365)
+    else: # Custom
+        return
+        
+    st.session_state.p3_start_date = start
+    st.session_state.p3_end_date = end
+
+st.radio(
+    "Quick Select Range", 
+    ["7 Days", "15 Days", "30 Days", "3 Months", "6 Months", "1 Year"], 
+    horizontal=True, 
+    key="p3_preset_radio",
+    on_change=update_dates,
+    index=5 # Default 1 Year
+)
+
+# Initialize defaults if needed
+if 'p3_start_date' not in st.session_state:
+    st.session_state.p3_start_date = datetime.today() - timedelta(days=365)
+if 'p3_end_date' not in st.session_state:
+    st.session_state.p3_end_date = datetime.today()
+
 with col_s1:
-    START_DATE = st.date_input("Start Date", value=datetime.today() - timedelta(days=365))
+    START_DATE = st.date_input("Start Date", key="p3_start_date")
 with col_s2:
-    END_DATE = st.date_input("End Date", value=datetime.today(), max_value=datetime.today())
+    END_DATE = st.date_input("End Date", key="p3_end_date", max_value=datetime.today())
 
 with col_s3:
     SELECTED_STOCK = st.text_input("Stock Name", value="RELIANCE", help="Enter stock symbol (e.g. TCS, INFY)")
@@ -350,6 +398,77 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
             fc2.metric("Total PnL", f"₹{f_total_pnl:,.2f}", delta_color="normal" if f_total_pnl >= 0 else "inverse")
             fc3.metric("ROI (on Filtered Max Inv)", f"{f_roi:.1f}%")
             st.write(f"*Filtered Max Investment: ₹{f_max_inv:,.2f}*")
+        
+            st.markdown("---")
+            
+            # --- Market Analysis Table ---
+            st.subheader("Market Analysis")
+            
+            # 1. Price Change
+            start_price = df_slice.iloc[0]['Close']
+            end_price = df_slice.iloc[-1]['Close']
+            price_change = end_price - start_price
+            price_change_pct = (price_change / start_price) * 100
+            
+            # 2. Perfect Trade (Min to Max)
+            # Find global min price and its date
+            min_row = df_slice.loc[df_slice['Low'].idxmin()]
+            global_min = min_row['Low']
+            min_date = min_row['Date']
+            
+            # Slice df AFTER min date to find max
+            df_after_min = df_slice[df_slice['Date'] > min_date]
+            
+            if not df_after_min.empty:
+                max_row = df_after_min.loc[df_after_min['High'].idxmax()]
+                global_max_after_min = max_row['High']
+                max_date = max_row['Date']
+                
+                # Perfect Trade ROI
+                quantity_perfect = INITIAL_INVESTMENT / global_min
+                gross_val_perfect = quantity_perfect * global_max_after_min
+                # Assume 1 cycle charges
+                pnl_perfect = gross_val_perfect - INITIAL_INVESTMENT - CHARGES_PER_TRADE 
+                roi_perfect = (pnl_perfect / INITIAL_INVESTMENT) * 100
+            else:
+                global_max_after_min = global_min # No movement after min?
+                max_date = min_date
+                pnl_perfect = 0
+                roi_perfect = 0
+
+            # 3. Buy & Hold
+            quantity_bnh = INITIAL_INVESTMENT / start_price
+            gross_val_bnh = quantity_bnh * end_price
+            pnl_bnh = gross_val_bnh - INITIAL_INVESTMENT - CHARGES_PER_TRADE
+            roi_bnh = (pnl_bnh / INITIAL_INVESTMENT) * 100
+            
+            # Construct DataFrame
+            analysis_data = {
+                "Metric": [
+                    "Lowest Price (Buy Point)", 
+                    "Highest Price (Sell Point)", 
+                    "Perfect Trade (Min -> Max)", 
+                    "Buy & Hold (Start -> End)",
+                    "Price Change (Start -> End)"
+                ],
+                "Value": [
+                    f"₹{global_min:,.2f}",
+                    f"₹{global_max_after_min:,.2f}",
+                    f"PnL: ₹{pnl_perfect:,.2f}",
+                    f"PnL: ₹{pnl_bnh:,.2f}",
+                    f"{price_change_pct:.2f}%"
+                ],
+                "Date/ROI": [
+                    min_date.strftime('%Y-%m-%d'),
+                    max_date.strftime('%Y-%m-%d'),
+                    f"ROI: {roi_perfect:.2f}%",
+                    f"ROI: {roi_bnh:.2f}%",
+                    f"{start_date_ts.date()} to {current_date.date()}"
+                ]
+            }
+            st.table(pd.DataFrame(analysis_data))
+            
+            st.markdown("---")
         
         # Format
         display_df['Entry Date'] = display_df['Entry Date'].dt.date
