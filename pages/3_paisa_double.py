@@ -309,7 +309,8 @@ if st.button("Run Backtest", type="primary"):
             'current_investment': current_investment,
             'open_trade_val': open_trade_val,
             'selected_stock': SELECTED_STOCK,
-            'position': last_trade_position
+            'position': last_trade_position,
+            'price_data': df_slice
         }
 
     except Exception as e:
@@ -327,6 +328,7 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
     open_trade_val = data['open_trade_val']
     stock_symbol = data['selected_stock']
     position = data['position']
+    df_slice = data['price_data']
     
     st.header(f"Performance: {stock_symbol}")
     
@@ -463,7 +465,7 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
                     max_date.strftime('%Y-%m-%d'),
                     f"ROI: {roi_perfect:.2f}%",
                     f"ROI: {roi_bnh:.2f}%",
-                    f"{start_date_ts.date()} to {current_date.date()}"
+                    f"{df_slice.iloc[0]['Date'].date()} to {df_slice.iloc[-1]['Date'].date()}"
                 ]
             }
             st.table(pd.DataFrame(analysis_data))
