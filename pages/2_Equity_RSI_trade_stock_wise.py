@@ -277,6 +277,7 @@ if st.button("Run Backtest", type="primary"):
             st.subheader("Trade History")
             # Formatting for display
             display_df = trades_df.copy()
+            display_df = display_df.sort_values("entry_date", ascending=True)
             display_df['entry_date'] = display_df['entry_date'].dt.date
             display_df['exit_date'] = display_df['exit_date'].dt.date
             cols_to_show = ['Stock', 'entry_date', 'entry_rsi', 'entry_price', 'quantity', 'exit_date', 'exit_price', 'holding_days', 'charges', 'pnl', 'cum_pnl']

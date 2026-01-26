@@ -36,6 +36,12 @@ else:
     - Fetches live data from Yahoo Finance.
     - Allows custom date range backtesting.
     - Provides detailed trade history and capital deployment analysis.
+
+    **3. Paisa Double Strategy (Spot Martingale)**
+    - Long-only Spot Martingale strategy for Stocks.
+    - Doubles (or multiplies) position size after a Stop Loss to recover losses.
+    - Resets to initial investment after a Take Profit.
+    - High-risk recovery strategy adapted for spot market (no liquidation).
     
     #### How it works:
     1. Navigate to the strategy page from the sidebar.
