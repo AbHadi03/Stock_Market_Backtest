@@ -206,6 +206,7 @@ if st.button("Run Backtest", type="primary"):
         # Iterate day by day
         for i, row in df_slice.iterrows():
             current_date = row['Date']
+            open_price = row['Open']
             close_price = row['Close']
             high_price = row['High']
             low_price = row['Low']
@@ -214,31 +215,39 @@ if st.button("Run Backtest", type="primary"):
             if position:
                 entry_price = position['entry_price']
                 
-                # Check Exit Conditions
-                
-                # TP Price
-                tp_price = entry_price * (1 + TAKE_PROFIT_PCT / 100)
-                # SL Price
-                sl_price = entry_price * (1 - STOP_LOSS_PCT / 100)
+                # Check Exit Conditions (Only after T+2 days)
+                duration_days = (current_date - position['entry_date']).days
                 
                 exit_action = None
                 exit_price = 0
                 
-                # Check if SL hit (Low <= SL) - Prioritize SL check if both hit in same candle? 
-                # Usually checking Low first is safer.
-                if low_price <= sl_price:
-                    exit_action = "STOP LOSS"
-                    exit_price = sl_price
-                elif high_price >= tp_price:
-                    exit_action = "TAKE PROFIT"
-                    exit_price = tp_price
+                if duration_days >= 2:
+                    # TP Price
+                    tp_price = entry_price * (1 + TAKE_PROFIT_PCT / 100)
+                    # SL Price
+                    sl_price = entry_price * (1 - STOP_LOSS_PCT / 100)
+                    
+                    # Check if Gap down below SL at Open
+                    if open_price <= sl_price:
+                        exit_action = "STOP LOSS"
+                        exit_price = open_price # Exit at Open if it gaps below SL
+                    # Check if Low hit SL during the day
+                    elif low_price <= sl_price:
+                        exit_action = "STOP LOSS"
+                        exit_price = sl_price
+                    # Check if Gap up above TP at Open
+                    elif open_price >= tp_price:
+                        exit_action = "TAKE PROFIT"
+                        exit_price = open_price # Exit at Open if it gaps above TP
+                    # Check if High hit TP during the day
+                    elif high_price >= tp_price:
+                        exit_action = "TAKE PROFIT"
+                        exit_price = tp_price
                 
                 if exit_action:
                     # Execute Exit
-                    gross_val = position['quantity'] * exit_price
-                    # We deduct charges once per "trade cycle"
-                    
-                    pnl = gross_val - position['invested_amount'] - CHARGES_PER_TRADE
+                    # PnL = (Exit Price - Entry Price) * Quantity - Charges
+                    pnl = (exit_price - entry_price) * position['quantity'] - CHARGES_PER_TRADE
                     total_pnl += pnl
                     total_charges += CHARGES_PER_TRADE
                     
@@ -368,6 +377,29 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
     tv_symbol = stock_symbol.replace(".NS", "")
     tv_url = f"https://www.tradingview.com/chart/?symbol=NSE%3A{tv_symbol}"
     st.link_button("View Chart on TradingView", tv_url)
+
+    # --- Download Analytics ---
+    download_data = {
+        "Stock Name": [stock_symbol],
+        "Strategy Name": ["Paisa Double Strategy"],
+        "Total PnL": [net_profit],
+        "Total Trades": [total_trades],
+        "XIRR": [xirr],
+        "ROI (on Max Inv)": [roi],
+        "Cycles Completed": [cycles_completed],
+        "Max Investment": [max_investment_used],
+        "Open Value": [open_trade_val],
+        "TradingView Link": [tv_url]
+    }
+    download_df = pd.DataFrame(download_data)
+    csv_data = download_df.to_csv(index=False).encode('utf-8')
+    
+    st.download_button(
+        label="Download Analytics as CSV",
+        data=csv_data,
+        file_name=f"{stock_symbol}_paisa_double_analytics.csv",
+        mime="text/csv"
+    )
     
     st.markdown("---")
     
@@ -405,7 +437,7 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
         display_df['Entry Date'] = display_df['Entry Date'].dt.date
         display_df['Exit Date'] = display_df['Exit Date'].dt.date
         
-        cols_to_show = ['Cycle', 'Entry Date', 'Exit Date', 'Symbol', 'Action', 'Entry Price', 'Exit Price', 'Quantity', 'Invested', 'PnL', 'Cumulative PnL', 'Duration (Days)']
+        cols_to_show = ['Symbol', 'Entry Date', 'Entry Price', 'Quantity', 'Invested', 'Exit Date', 'Exit Price', 'Action', 'PnL', 'Cumulative PnL', 'Duration (Days)', 'Cycle']
         st.dataframe(display_df[cols_to_show], width='stretch')
         
         st.markdown("---")
