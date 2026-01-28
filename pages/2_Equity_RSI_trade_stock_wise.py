@@ -91,12 +91,24 @@ with col2:
     )
     RSI_BUY_LEVEL = st.number_input(
         "RSI Buy Level", 
-        value=30, 
+        value=40, 
         step=1,
-        help="RSI level below which a buy signal is triggered."
+        help="Initial RSI level below which a buy signal is triggered."
+    )
+    RSI_BUY_GAP = st.number_input(
+        "RSI Buy Gap",
+        value=5,
+        step=1,
+        help="Decrease in RSI requirement for subsequent buys in the same cycle."
     )
 
 with col3:
+    RSI_RESISTANCE = st.number_input(
+        "RSI Resistance",
+        value=50,
+        step=1,
+        help="RSI level that triggers a cycle reset (buying restarts from Buy Level)."
+    )
     CHARGES_PER_TRADE = st.number_input(
         "Charges Per Trade", 
         value=25.0, 
@@ -159,6 +171,10 @@ if st.button("Run Backtest", type="primary"):
         capital_timeline = []
         last_logged_capital = None
         
+        # State Machine for RSI Cycle
+        current_buy_threshold = RSI_BUY_LEVEL
+        hit_resistance = False # Tracks if RSI has crossed ABOVE resistance in current cycle
+        
         # We need a global sense of time for capital, but here it's just one stock.
         # Capital deployed is simply Open Trades * Investment
         
@@ -176,24 +192,40 @@ if st.button("Run Backtest", type="primary"):
                     all_trades.append(trade)
                     open_trades.remove(trade)
             
-            # ENTRY Logic
-            if pd.notna(row["RSI"]) and row["RSI"] < RSI_BUY_LEVEL:
-                entry_price = row["Close"]
-                quantity = INVESTMENT_PER_TRADE / entry_price
-                trade = {
-                    "Stock": SELECTED_STOCK,
-                    "entry_date": row["Date"],
-                    "entry_rsi": row["RSI"],
-                    "entry_price": entry_price,
-                    "quantity": quantity,
-                    "target_price": entry_price * (1 + TARGET_PCT),
-                    "exit_date": None,
-                    "exit_price": None,
-                    "pnl": None,
-                    "charges": None,
-                    "holding_days": None,
-                }
-                open_trades.append(trade)
+            # ENTRY / CYCLE Logic
+            rsi_val = row["RSI"]
+            
+            if pd.notna(rsi_val):
+                # 1. Check for Resistance Reset
+                if rsi_val >= RSI_RESISTANCE:
+                    hit_resistance = True
+                
+                # If we hit resistance and now dropped below it, RESET the cycle
+                if hit_resistance and rsi_val < RSI_RESISTANCE:
+                    current_buy_threshold = RSI_BUY_LEVEL
+                    hit_resistance = False
+                
+                # 2. Check for Buy Signal
+                if rsi_val < current_buy_threshold:
+                    entry_price = row["Close"]
+                    quantity = INVESTMENT_PER_TRADE / entry_price
+                    trade = {
+                        "Stock": SELECTED_STOCK,
+                        "entry_date": row["Date"],
+                        "entry_rsi": float(round(rsi_val, 2)),
+                        "entry_price": float(round(entry_price, 2)),
+                        "quantity": float(round(quantity, 2)),
+                        "target_price": float(round(entry_price * (1 + TARGET_PCT), 2)),
+                        "exit_date": None,
+                        "exit_price": None,
+                        "pnl": None,
+                        "charges": None,
+                        "holding_days": None,
+                    }
+                    open_trades.append(trade)
+                    
+                    # Decrement threshold for next buy in this cycle
+                    current_buy_threshold -= RSI_BUY_GAP
             
             # Capital Tracking (Snapshot at end of day)
             current_capital = len(open_trades) * INVESTMENT_PER_TRADE
