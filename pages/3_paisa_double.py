@@ -247,9 +247,9 @@ if st.button("Run Backtest", type="primary"):
                 if exit_action:
                     # Execute Exit
                     # PnL = (Exit Price - Entry Price) * Quantity - Charges
-                    pnl = (exit_price - entry_price) * position['quantity'] - CHARGES_PER_TRADE
-                    total_pnl += pnl
-                    total_charges += CHARGES_PER_TRADE
+                    pnl = float(round((exit_price - entry_price) * position['quantity'] - CHARGES_PER_TRADE, 2))
+                    total_pnl = float(round(total_pnl + pnl, 2))
+                    total_charges = float(round(total_charges + CHARGES_PER_TRADE, 2))
                     
                     duration = (current_date - position['entry_date']).days
                     
@@ -259,10 +259,10 @@ if st.button("Run Backtest", type="primary"):
                         'Exit Date': current_date,
                         'Symbol': SELECTED_STOCK,
                         'Action': exit_action,
-                        'Entry Price': entry_price,
-                        'Exit Price': exit_price,
-                        'Quantity': position['quantity'],
-                        'Invested': position['invested_amount'],
+                        'Entry Price': float(round(entry_price, 2)),
+                        'Exit Price': float(round(exit_price, 2)),
+                        'Quantity': float(round(position['quantity'], 2)),
+                        'Invested': float(round(position['invested_amount'], 2)),
                         'PnL': pnl,
                         'Cumulative PnL': total_pnl,
                         'Duration (Days)': duration
@@ -284,19 +284,19 @@ if st.button("Run Backtest", type="primary"):
             elif not position:
                 # Update Max Investment
                 if current_investment > max_investment_used:
-                    max_investment_used = current_investment
+                    max_investment_used = float(round(current_investment, 2))
                     max_inv_cycle = current_cycle
 
                 # Buy at Close of this candle
                 
-                entry_price = close_price
-                quantity = current_investment / entry_price
+                entry_price = float(round(close_price, 2))
+                quantity = float(round(current_investment / entry_price, 2))
                 
                 position = {
                     'entry_date': current_date,
                     'entry_price': entry_price,
                     'quantity': quantity,
-                    'invested_amount': current_investment,
+                    'invested_amount': float(round(current_investment, 2)),
                     'cycle_number': current_cycle
                 }
         
@@ -304,7 +304,7 @@ if st.button("Run Backtest", type="primary"):
         open_trade_val = 0
         last_trade_position = None
         if position:
-            open_trade_val = position['quantity'] * df_slice.iloc[-1]['Close']
+            open_trade_val = float(round(position['quantity'] * df_slice.iloc[-1]['Close'], 2))
             last_trade_position = position
         
         # --- Store in Session State ---
@@ -319,7 +319,15 @@ if st.button("Run Backtest", type="primary"):
             'open_trade_val': open_trade_val,
             'selected_stock': SELECTED_STOCK,
             'position': last_trade_position,
-            'price_data': df_slice
+            'price_data': df_slice,
+            # Store inputs used for this run
+            'start_date': START_DATE,
+            'end_date': END_DATE,
+            'initial_investment': INITIAL_INVESTMENT,
+            'multiplier': MULTIPLIER,
+            'tp_pct': TAKE_PROFIT_PCT,
+            'sl_pct': STOP_LOSS_PCT,
+            'charges': CHARGES_PER_TRADE
         }
 
     except Exception as e:
@@ -339,6 +347,15 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
     position = data['position']
     df_slice = data['price_data']
     
+    # Retrieve inputs used for this run
+    run_start_date = data.get('start_date', START_DATE)
+    run_end_date = data.get('end_date', END_DATE)
+    run_initial_inv = data.get('initial_investment', INITIAL_INVESTMENT)
+    run_multiplier = data.get('multiplier', MULTIPLIER)
+    run_tp_pct = data.get('tp_pct', TAKE_PROFIT_PCT)
+    run_sl_pct = data.get('sl_pct', STOP_LOSS_PCT)
+    run_charges = data.get('charges', CHARGES_PER_TRADE)
+    
     st.header(f"Performance: {stock_symbol}")
     
     # Metrics
@@ -348,8 +365,8 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
     loss_count = len(results_df[results_df['Action'] == 'STOP LOSS']) if not results_df.empty else 0
     win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0
     
-    net_profit = results_df['PnL'].sum() if not results_df.empty else 0
-    roi = (net_profit / max_investment_used) * 100 if max_investment_used > 0 else 0
+    net_profit = float(round(results_df['PnL'].sum(), 2)) if not results_df.empty else 0.0
+    roi = float(round((net_profit / max_investment_used) * 100, 2)) if max_investment_used > 0 else 0.0
     
     # XIRR
     xirr = 0.0
@@ -361,7 +378,7 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
             cashflows.append((row_res["Exit Date"], exit_val))
         
         cashflow_df = pd.DataFrame(cashflows, columns=["date", "cashflow"]).sort_values("date")
-        xirr = calculate_xirr(cashflow_df)
+        xirr = float(round(calculate_xirr(cashflow_df), 4)) # Keeping 4 for raw rate, display as % will be rounded
 
     col_m1.metric("Total PnL", f"₹{net_profit:,.2f}", delta_color="normal" if net_profit >= 0 else "inverse")
     col_m2.metric("Total Trades", total_trades)
@@ -382,14 +399,21 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
     download_data = {
         "Stock Name": [stock_symbol],
         "Strategy Name": ["Paisa Double Strategy"],
-        "Total PnL": [net_profit],
+        "Start Date": [run_start_date],
+        "End Date": [run_end_date],
+        "Initial Investment": [run_initial_inv],
+        "Multiplier": [run_multiplier],
+        "Take Profit %": [run_tp_pct],
+        "Stop Loss %": [run_sl_pct],
+        "Charges Per Trade": [float(round(run_charges, 2))],
+        "Total PnL": [float(round(net_profit, 2))],
         "Total Trades": [total_trades],
-        "XIRR": [xirr],
-        "ROI (on Max Inv)": [roi],
+        "XIRR": [f"{xirr * 100:.2f}%"],
+        "ROI (on Max Inv)": [f"{roi:.2f}%"],
         "Cycles Completed": [cycles_completed],
-        "Max Investment": [max_investment_used],
-        "Open Value": [open_trade_val],
-        "TradingView Link": [tv_url]
+        "Max Investment": [float(round(max_investment_used, 2))],
+        "Max Inv Cycle": [max_inv_cycle],
+        "Open Value": [float(round(open_trade_val, 2))]
     }
     download_df = pd.DataFrame(download_data)
     csv_data = download_df.to_csv(index=False).encode('utf-8')
@@ -429,9 +453,9 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
             st.markdown("##### Filtered Data Analytics")
             fc1, fc2, fc3 = st.columns(3)
             fc1.metric("Total Duration (Days)", int(f_total_duration))
-            fc2.metric("Total PnL", f"₹{f_total_pnl:,.2f}", delta_color="normal" if f_total_pnl >= 0 else "inverse")
-            fc3.metric("ROI (on Filtered Max Inv)", f"{f_roi:.1f}%")
-            st.write(f"*Filtered Max Investment: ₹{f_max_inv:,.2f}*")
+            fc2.metric("Total PnL", f"₹{float(round(f_total_pnl, 2)):,.2f}", delta_color="normal" if f_total_pnl >= 0 else "inverse")
+            fc3.metric("ROI (on Filtered Max Inv)", f"{f_roi:.2f}%")
+            st.write(f"*Filtered Max Investment: ₹{float(round(f_max_inv, 2)):,.2f}*")
         
         # Format
         display_df['Entry Date'] = display_df['Entry Date'].dt.date
@@ -469,19 +493,19 @@ if 'p3_results' in st.session_state and st.session_state.p3_results:
             quantity_perfect = INITIAL_INVESTMENT / global_min
             gross_val_perfect = quantity_perfect * global_max_after_min
             # Assume 1 cycle charges
-            pnl_perfect = gross_val_perfect - INITIAL_INVESTMENT - CHARGES_PER_TRADE 
-            roi_perfect = (pnl_perfect / INITIAL_INVESTMENT) * 100
+            pnl_perfect = float(round(gross_val_perfect - INITIAL_INVESTMENT - CHARGES_PER_TRADE, 2))
+            roi_perfect = float(round((pnl_perfect / INITIAL_INVESTMENT) * 100, 2))
         else:
             global_max_after_min = global_min # No movement after min?
             max_date = min_date
-            pnl_perfect = 0
-            roi_perfect = 0
+            pnl_perfect = 0.0
+            roi_perfect = 0.0
 
         # 3. Buy & Hold
         quantity_bnh = INITIAL_INVESTMENT / start_price
         gross_val_bnh = quantity_bnh * end_price
-        pnl_bnh = gross_val_bnh - INITIAL_INVESTMENT - CHARGES_PER_TRADE
-        roi_bnh = (pnl_bnh / INITIAL_INVESTMENT) * 100
+        pnl_bnh = float(round(gross_val_bnh - INITIAL_INVESTMENT - CHARGES_PER_TRADE, 2))
+        roi_bnh = float(round((pnl_bnh / INITIAL_INVESTMENT) * 100, 2))
         
         # Construct DataFrame
         analysis_data = {
