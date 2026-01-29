@@ -55,13 +55,13 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 st.title("Equity RSI Strategy - Single Stock")
 st.markdown("---")
 
-st.markdown("""
-### Strategy Description
-- **Concept**: Relative Strength Index (RSI) Mean Reversion (Single Stock).
-- **Entry**: Buy when RSI < Buy Level (Over sold area).
-- **Exit**: Sell when Price > Entry Price * (1 + Target %).
-- **Goal**: Analyze the performance of the RSI strategy on a specific stock over a custom timeframe.
-""")
+with st.expander("📖 Strategy Description"):
+    st.markdown("""
+    - **Concept**: Relative Strength Index (RSI) Mean Reversion (Single Stock).
+    - **Entry**: Buy when RSI < Buy Level (Over sold area).
+    - **Exit**: Sell when Price > Entry Price * (1 + Target %).
+    - **Goal**: Analyze the performance of the RSI strategy on a specific stock over a custom timeframe.
+    """)
 
 
 # --- Inputs ---
@@ -108,6 +108,12 @@ with col3:
         value=50,
         step=1,
         help="RSI level that triggers a cycle reset (buying restarts from Buy Level)."
+    )
+    PRICE_CHANGE_PCT = st.number_input(
+        "Price Change %",
+        value=3.0,
+        step=0.5,
+        help="Minimum price drop required between consecutive buys in a cycle (e.g., 3.0 for 3%)."
     )
     CHARGES_PER_TRADE = st.number_input(
         "Charges Per Trade", 
@@ -174,6 +180,7 @@ if st.button("Run Backtest", type="primary"):
         # State Machine for RSI Cycle
         current_buy_threshold = RSI_BUY_LEVEL
         hit_resistance = False # Tracks if RSI has crossed ABOVE resistance in current cycle
+        last_buy_price = None # Tracks the price of the last buy in the current cycle
         
         # We need a global sense of time for capital, but here it's just one stock.
         # Capital deployed is simply Open Trades * Investment
@@ -181,16 +188,29 @@ if st.button("Run Backtest", type="primary"):
         for index, row in df.iterrows():
             # EXIT Logic
             for trade in open_trades.copy():
-                if row["High"] >= trade["target_price"]:
-                    trade["exit_date"] = row["Date"]
-                    trade["exit_price"] = trade["target_price"]
-                    gross_pnl = trade["quantity"] * (trade["exit_price"] - trade["entry_price"])
-                    trade["charges"] = CHARGES_PER_TRADE
-                    trade["pnl"] = gross_pnl - CHARGES_PER_TRADE
-                    trade["holding_days"] = (trade["exit_date"] - trade["entry_date"]).days
+                duration_days = (row["Date"] - trade["entry_date"]).days
+                
+                if duration_days >= 2:
+                    exit_price = None
+                    exit_date = row["Date"]
                     
-                    all_trades.append(trade)
-                    open_trades.remove(trade)
+                    # 1. Check if price already above or at target at Open (Gap Case)
+                    if row["Open"] >= trade["target_price"]:
+                        exit_price = row["Open"]
+                    # 2. Check if High hit the target during the day
+                    elif row["High"] >= trade["target_price"]:
+                        exit_price = trade["target_price"]
+                        
+                    if exit_price:
+                        trade["exit_date"] = exit_date
+                        trade["exit_price"] = float(round(exit_price, 2))
+                        gross_pnl = trade["quantity"] * (trade["exit_price"] - trade["entry_price"])
+                        trade["charges"] = CHARGES_PER_TRADE
+                        trade["pnl"] = float(round(gross_pnl - CHARGES_PER_TRADE, 2))
+                        trade["holding_days"] = (trade["exit_date"] - trade["entry_date"]).days
+                        
+                        all_trades.append(trade)
+                        open_trades.remove(trade)
             
             # ENTRY / CYCLE Logic
             rsi_val = row["RSI"]
@@ -204,9 +224,16 @@ if st.button("Run Backtest", type="primary"):
                 if hit_resistance and rsi_val < RSI_RESISTANCE:
                     current_buy_threshold = RSI_BUY_LEVEL
                     hit_resistance = False
+                    last_buy_price = None
                 
                 # 2. Check for Buy Signal
-                if rsi_val < current_buy_threshold:
+                price_check = True
+                if last_buy_price is not None:
+                    # Subsequent buys must be at a price lower by PRICE_CHANGE_PCT
+                    required_price = last_buy_price * (1 - PRICE_CHANGE_PCT / 100)
+                    price_check = row["Close"] <= required_price
+
+                if rsi_val < current_buy_threshold and price_check:
                     entry_price = row["Close"]
                     quantity = INVESTMENT_PER_TRADE / entry_price
                     trade = {
@@ -224,8 +251,9 @@ if st.button("Run Backtest", type="primary"):
                     }
                     open_trades.append(trade)
                     
-                    # Decrement threshold for next buy in this cycle
+                    # Update for next buy in this cycle
                     current_buy_threshold -= RSI_BUY_GAP
+                    last_buy_price = entry_price
             
             # Capital Tracking (Snapshot at end of day)
             current_capital = len(open_trades) * INVESTMENT_PER_TRADE

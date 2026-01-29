@@ -79,13 +79,13 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 st.title("Equity RSI Strategy")
 st.markdown("---")
 
-st.markdown("""
-### Strategy Description
-- **Concept**: Relative Strength Index (RSI) Mean Reversion.
-- **Entry**: Buy when RSI < Buy Level (Over sold area).
-- **Exit**: Sell when Price > Entry Price * (1 + Target %).
-- **Goal**: Capture short-term bounces in oversold stocks.
-""")
+with st.expander("📖 Strategy Description"):
+    st.markdown("""
+    - **Concept**: Relative Strength Index (RSI) Mean Reversion.
+    - **Entry**: Buy when RSI < Buy Level (Over sold area).
+    - **Exit**: Sell when Price > Entry Price * (1 + Target %).
+    - **Goal**: Capture short-term bounces in oversold stocks.
+    """)
 
 
 # Inputs

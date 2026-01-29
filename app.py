@@ -42,6 +42,11 @@ else:
     - Doubles (or multiplies) position size after a Stop Loss to recover losses.
     - Resets to initial investment after a Take Profit.
     - High-risk recovery strategy adapted for spot market (no liquidation).
+
+    **4. Vishal Malkhan GFS Strategy**
+    - Multi-timeframe RSI trend following strategy.
+    - Uses Monthly, Weekly, and Daily RSI to identify high-probability "Sona" entries.
+    - Enforces a single-active-trade constraint and T+2 holding rules.
     
     #### How it works:
     1. Navigate to the strategy page from the sidebar.
