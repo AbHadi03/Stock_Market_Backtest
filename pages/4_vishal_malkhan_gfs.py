@@ -111,29 +111,34 @@ if st.button("Run Backtest", type="primary"):
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
             
-        df = df.reset_index()
+        # Robustly ensure 'Date' is a column
+        if 'Date' not in df.columns:
+            df = df.reset_index()
+        
+        # Rename 'index' to 'Date' if necessary (happens with some yfinance versions)
+        if 'Date' not in df.columns and 'index' in df.columns:
+            df = df.rename(columns={'index': 'Date'})
+            
         df['Date'] = pd.to_datetime(df['Date']).dt.tz_localize(None)
         
         # --- Multi-Timeframe RSI Calculation ---
         # 1. Daily RSI
         df['RSI_Daily'] = calculate_rsi(df['Close'], RSI_PERIOD)
         
-        # 2. Weekly RSI
-        df_w = df.resample('W-MON', on='Date').last().dropna().copy()
+        # 2. Weekly RSI - Use set_index for robust resampling
+        df_w = df.set_index('Date').resample('W-MON').last().dropna().copy()
         df_w['RSI_Weekly'] = calculate_rsi(df_w['Close'], RSI_PERIOD)
-        df_w = df_w.reset_index(drop=True)
-        # Identify the exact date for merging
-        # Instead of merge, we can map or ffill
-        # Let's use a simpler way: calculate RSI on weekly and map back
+        df_w = df_w.reset_index()
         
-        # Create a helper series for Weekly RSI
+        # Map Weekly RSI back to main dataframe
         weekly_rsi_map = df_w.set_index('Date')['RSI_Weekly']
         df['RSI_Weekly'] = df['Date'].map(weekly_rsi_map).ffill()
         
         # 3. Monthly RSI
-        df_m = df.resample('ME', on='Date').last().dropna().copy()
+        df_m = df.set_index('Date').resample('ME').last().dropna().copy()
         df_m['RSI_Monthly'] = calculate_rsi(df_m['Close'], RSI_PERIOD)
-        df_m = df_m.reset_index(drop=True)
+        df_m = df_m.reset_index()
+        
         monthly_rsi_map = df_m.set_index('Date')['RSI_Monthly']
         df['RSI_Monthly'] = df['Date'].map(monthly_rsi_map).ffill()
         
