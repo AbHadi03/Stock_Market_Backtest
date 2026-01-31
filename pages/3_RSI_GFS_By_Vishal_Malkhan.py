@@ -85,11 +85,53 @@ with col3:
     CHARGES_PER_TRADE = st.number_input("Charges Per Trade (Rs)", value=25.0, step=5.0)
     SELECTED_STOCK = st.text_input("Stock Name", value="RELIANCE")
 
+st.markdown("### Date Selection")
+
+# Date Presets logic
+if 'date_preset' not in st.session_state:
+    st.session_state.date_preset = "1 Year"
+
+def update_dates():
+    preset = st.session_state.p4_preset_radio
+    end = datetime.today()
+    if preset == "7 Days":
+        start = end - timedelta(days=7)
+    elif preset == "15 Days":
+        start = end - timedelta(days=15)
+    elif preset == "30 Days":
+        start = end - timedelta(days=30)
+    elif preset == "3 Months":
+        start = end - timedelta(days=90)
+    elif preset == "6 Months":
+        start = end - timedelta(days=180)
+    elif preset == "1 Year":
+        start = end - timedelta(days=365)
+    else: # Custom
+        return
+        
+    st.session_state.p4_start_date = start
+    st.session_state.p4_end_date = end
+
+st.radio(
+    "Quick Select Range", 
+    ["7 Days", "15 Days", "30 Days", "3 Months", "6 Months", "1 Year"], 
+    horizontal=True, 
+    key="p4_preset_radio",
+    on_change=update_dates,
+    index=5 # Default 1 Year
+)
+
+# Initialize defaults if needed
+if 'p4_start_date' not in st.session_state:
+    st.session_state.p4_start_date = datetime.today() - timedelta(days=365)
+if 'p4_end_date' not in st.session_state:
+    st.session_state.p4_end_date = datetime.today()
+
 col_d1, col_d2 = st.columns(2)
 with col_d1:
-    START_DATE = st.date_input("Start Date", value=datetime.today() - timedelta(days=365*2))
+    START_DATE = st.date_input("Start Date", key="p4_start_date")
 with col_d2:
-    END_DATE = st.date_input("End Date", value=datetime.today())
+    END_DATE = st.date_input("End Date", key="p4_end_date", max_value=datetime.today())
 
 # --- Run Backtest ---
 if st.button("Run Backtest", type="primary"):
@@ -215,6 +257,12 @@ if st.button("Run Backtest", type="primary"):
             
             # Metrics
             st.subheader("Performance Summary")
+            
+            # TradingView Link
+            tv_symbol = SELECTED_STOCK.replace(".NS", "")
+            tv_url = f"https://www.tradingview.com/chart/?symbol=NSE%3A{tv_symbol}"
+            st.link_button("View Chart on TradingView", tv_url)
+            
             m1, m2, m3, m4 = st.columns(4)
             total_trades_count = len(all_trades)
             net_pnl = total_pnl
@@ -223,6 +271,52 @@ if st.button("Run Backtest", type="primary"):
             m2.metric("Net P&L", f"₹{net_pnl:,.2f}")
             m3.metric("Profit per Trade", f"₹{float(round(net_pnl/total_trades_count, 2)):,.2f}" if total_trades_count > 0 else "₹0.00")
             m4.metric("Active Position", "Yes" if position else "No")
+            
+            # --- Download Analytics ---
+            roi_on_investment = (net_pnl / INVEST_PER_TRADE * 100) if INVEST_PER_TRADE > 0 else 0.0
+            
+            # Calculate XIRR
+            xirr_val = 0.0
+            if not trades_df.empty:
+                cashflows = []
+                for _, row_trade in trades_df.iterrows():
+                    cashflows.append((row_trade["Entry Date"], -INVEST_PER_TRADE))
+                    exit_val = (row_trade["Quantity"] * row_trade["Exit Price"]) - CHARGES_PER_TRADE
+                    cashflows.append((row_trade["Exit Date"], exit_val))
+                
+                cashflow_df_xirr = pd.DataFrame(cashflows, columns=["date", "cashflow"]).sort_values("date")
+                xirr_val = calculate_xirr(cashflow_df_xirr)
+            
+            download_data = {
+                "Stock Name": [SELECTED_STOCK],
+                "Strategy Name": ["Vishal Malkhan GFS Strategy"],
+                "Start Date": [START_DATE],
+                "End Date": [END_DATE],
+                "Investment Per Trade": [INVEST_PER_TRADE],
+                "Target %": [TARGET_PCT],
+                "RSI Period": [RSI_PERIOD],
+                "Monthly RSI Threshold": [MONTHLY_RSI_THRESH],
+                "Weekly RSI Threshold": [WEEKLY_RSI_THRESH],
+                "Daily RSI Threshold": [DAILY_RSI_THRESH],
+                "Charges Per Trade": [float(round(CHARGES_PER_TRADE, 2))],
+                "Total Trades": [total_trades_count],
+                "Net PnL": [float(round(net_pnl, 2))],
+                "Profit per Trade": [float(round(net_pnl/total_trades_count, 2)) if total_trades_count > 0 else 0.0],
+                "XIRR": [f"{xirr_val * 100:.2f}%"],
+                "ROI (on Investment)": [f"{roi_on_investment:.2f}%"],
+                "Active Position": ["Yes" if position else "No"]
+            }
+            download_df = pd.DataFrame(download_data)
+            csv_data = download_df.to_csv(index=False).encode('utf-8')
+            
+            st.download_button(
+                label="Download Analytics as CSV",
+                data=csv_data,
+                file_name=f"{SELECTED_STOCK}_gfs_analytics.csv",
+                mime="text/csv"
+            )
+            
+            st.markdown("---")
             
             # --- Open Trade Section ---
             st.subheader("Open Trade Status")

@@ -125,10 +125,50 @@ with col3:
 st.markdown("### Stock Selection")
 col_s1, col_s2, col_s3 = st.columns(3)
 
+# Date Presets logic
+if 'date_preset' not in st.session_state:
+    st.session_state.date_preset = "1 Year"
+
+def update_dates():
+    preset = st.session_state.p2_preset_radio
+    end = datetime.today()
+    if preset == "7 Days":
+        start = end - timedelta(days=7)
+    elif preset == "15 Days":
+        start = end - timedelta(days=15)
+    elif preset == "30 Days":
+        start = end - timedelta(days=30)
+    elif preset == "3 Months":
+        start = end - timedelta(days=90)
+    elif preset == "6 Months":
+        start = end - timedelta(days=180)
+    elif preset == "1 Year":
+        start = end - timedelta(days=365)
+    else: # Custom
+        return
+        
+    st.session_state.p2_start_date = start
+    st.session_state.p2_end_date = end
+
+st.radio(
+    "Quick Select Range", 
+    ["7 Days", "15 Days", "30 Days", "3 Months", "6 Months", "1 Year"], 
+    horizontal=True, 
+    key="p2_preset_radio",
+    on_change=update_dates,
+    index=5 # Default 1 Year
+)
+
+# Initialize defaults if needed
+if 'p2_start_date' not in st.session_state:
+    st.session_state.p2_start_date = datetime.today() - timedelta(days=365)
+if 'p2_end_date' not in st.session_state:
+    st.session_state.p2_end_date = datetime.today()
+
 with col_s1:
-    START_DATE = st.date_input("Start Date", value=datetime.today() - timedelta(days=365*3))
+    START_DATE = st.date_input("Start Date", key="p2_start_date")
 with col_s2:
-    END_DATE = st.date_input("End Date", value=datetime.today(), max_value=datetime.today())
+    END_DATE = st.date_input("End Date", key="p2_end_date", max_value=datetime.today())
 
 with col_s3:
     SELECTED_STOCK = st.text_input("Stock Name", value="RELIANCE", help="Enter stock symbol (e.g. TCS, INFY)")
@@ -307,6 +347,43 @@ if st.button("Run Backtest", type="primary"):
             tv_symbol = SELECTED_STOCK.replace(".NS", "")
             tv_url = f"https://www.tradingview.com/chart/?symbol=NSE%3A{tv_symbol}"
             st.link_button("View Chart on TradingView", tv_url)
+            
+            # --- Download Analytics ---
+            roi_on_max = (net_pnl / max_capital * 100) if max_capital > 0 else 0.0
+            download_data = {
+                "Stock Name": [SELECTED_STOCK],
+                "Strategy Name": ["Deep RSI Strategy (MK Sir)"],
+                "Start Date": [START_DATE],
+                "End Date": [END_DATE],
+                "Investment Per Trade": [INVESTMENT_PER_TRADE],
+                "Target %": [TARGET_PCT],
+                "RSI Period": [RSI_PERIOD],
+                "RSI Buy Level": [RSI_BUY_LEVEL],
+                "RSI Buy Gap": [RSI_BUY_GAP],
+                "RSI Resistance": [RSI_RESISTANCE],
+                "Price Change %": [PRICE_CHANGE_PCT],
+                "Charges Per Trade": [float(round(CHARGES_PER_TRADE, 2))],
+                "Total Trades": [total_trades],
+                "Total Charges": [float(round(total_charges, 2))],
+                "Net PnL": [float(round(net_pnl, 2))],
+                "Win Rate": [f"{win_rate:.2f}%"],
+                "Avg Holding Days": [f"{avg_holding_days:.2f}"],
+                "Max Capital Deployed": [float(round(max_capital, 2))],
+                "Strategy XIRR": [f"{xirr * 100:.2f}%"],
+                "ROI (on Max Capital)": [f"{roi_on_max:.2f}%"],
+                "Current Investment": [float(round(open_trades_value, 2))]
+            }
+            download_df = pd.DataFrame(download_data)
+            csv_data = download_df.to_csv(index=False).encode('utf-8')
+            
+            st.download_button(
+                label="Download Analytics as CSV",
+                data=csv_data,
+                file_name=f"{SELECTED_STOCK}_deep_rsi_analytics.csv",
+                mime="text/csv"
+            )
+            
+            st.markdown("---")
             
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Trades", total_trades)
