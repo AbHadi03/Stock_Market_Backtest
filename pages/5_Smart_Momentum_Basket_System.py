@@ -701,36 +701,49 @@ if st.button("🔍 Run Screener and Backtest", type="primary"):
     # Track current portfolio
     current_portfolio = None
     entry_date = None
+    need_rebalance = False
+    
+    # Use initial screener results for first entry
+    initial_stocks_to_use = selected_stocks.copy()
     
     for current_date in date_range:
         # Skip weekends
         if current_date.weekday() >= 5:
             continue
         
-        # If no portfolio, run screener and enter
+        # If no portfolio, enter new position
         if current_portfolio is None:
-            # Run screener for this date
-            screener_results = run_screener(valid_tickers, current_date, st.empty())
-            
-            if screener_results.empty or len(screener_results) < 5:
-                continue
-            
-            # Sort and select top stocks
-            screener_results = screener_results.sort_values('Return_15D_Pct', ascending=False).reset_index(drop=True)
-            selected = screener_results.head(num_stocks).copy()
-            
-            # Calculate allocation
-            total_ret = selected['Return_15D_Pct'].sum()
-            if total_ret <= 0:
-                continue
-            
-            selected['Contribution_Pct'] = (selected['Return_15D_Pct'] / total_ret) * 100
-            selected['Allocated_Amount'] = (selected['Contribution_Pct'] / 100) * current_capital
-            selected['Entry_Price'] = selected['Current_Price']
-            selected['Quantity'] = selected['Allocated_Amount'] / selected['Entry_Price']
+            # For first cycle, use initial screening results
+            # For subsequent cycles (after TP/SL), run screener again
+            if current_cycle == 1:
+                # Use the stocks already selected in Step 3
+                selected_for_entry = initial_stocks_to_use.copy()
+            else:
+                # Re-run screener for rebalancing after TP/SL hit
+                st.info(f"🔄 Rebalancing on {current_date.date()} (Cycle {current_cycle})...")
+                screener_results = run_screener(valid_tickers, current_date, st.empty())
+                
+                if screener_results.empty or len(screener_results) < 5:
+                    st.warning(f"⚠️ Not enough stocks qualified on {current_date.date()}, skipping...")
+                    continue
+                
+                # Sort and select top stocks
+                screener_results = screener_results.sort_values('Return_15D_Pct', ascending=False).reset_index(drop=True)
+                selected_for_entry = screener_results.head(num_stocks).copy()
+                
+                # Calculate allocation
+                total_ret = selected_for_entry['Return_15D_Pct'].sum()
+                if total_ret <= 0:
+                    st.warning(f"⚠️ No positive returns on {current_date.date()}, skipping...")
+                    continue
+                
+                selected_for_entry['Contribution_Pct'] = (selected_for_entry['Return_15D_Pct'] / total_ret) * 100
+                selected_for_entry['Allocated_Amount'] = (selected_for_entry['Contribution_Pct'] / 100) * current_capital
+                selected_for_entry['Quantity'] = selected_for_entry['Allocated_Amount'] / selected_for_entry['Current_Price']
             
             # Enter portfolio
-            current_portfolio = selected.copy()
+            selected_for_entry['Entry_Price'] = selected_for_entry['Current_Price']
+            current_portfolio = selected_for_entry.copy()
             entry_date = current_date
             
             # Record trades
