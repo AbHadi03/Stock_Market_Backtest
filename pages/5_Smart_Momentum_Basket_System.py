@@ -721,10 +721,26 @@ if st.button("🔍 Run Screener and Backtest", type="primary"):
             else:
                 # Re-run screener for rebalancing after TP/SL hit
                 st.info(f"🔄 Rebalancing on {current_date.date()} (Cycle {current_cycle})...")
-                screener_results = run_screener(valid_tickers, current_date, st.empty())
+                
+                # Create a progress container for screening
+                rebalance_progress = st.empty()
+                screener_results, rebalance_stage_results = run_screener(valid_tickers, current_date, rebalance_progress, show_stage_results=True)
+                
+                # Show stage-wise results for debugging
+                with st.expander(f"📊 Rebalancing Screening Details - {current_date.date()}", expanded=False):
+                    st.write(f"**Stage 0**: {len(rebalance_stage_results['stage_0_all'])} stocks with data")
+                    st.write(f"**Stage 1 (SMA)**: {len(rebalance_stage_results['stage_1_sma'])} stocks qualified")
+                    st.write(f"**Stage 2 (Volume)**: {len(rebalance_stage_results['stage_2_volume'])} stocks qualified")
+                    st.write(f"**Stage 3 (Price/MCap)**: {len(rebalance_stage_results['stage_3_price_mcap'])} stocks qualified")
+                    st.write(f"**Stage 4 (RSI)**: {len(rebalance_stage_results['stage_4_rsi'])} stocks qualified")
+                    st.write(f"**Stage 5 (MACD)**: {len(rebalance_stage_results['stage_5_macd'])} stocks qualified")
+                    st.write(f"**Stage 6 (Momentum)**: {len(rebalance_stage_results['stage_6_momentum'])} stocks qualified")
+                    
+                    if len(screener_results) > 0:
+                        st.dataframe(screener_results[['Ticker', 'Current_Price', 'Return_15D_Pct', 'Daily_RSI', 'Weekly_RSI', 'Monthly_RSI']], width='stretch')
                 
                 if screener_results.empty or len(screener_results) < 5:
-                    st.warning(f"⚠️ Not enough stocks qualified on {current_date.date()}, skipping...")
+                    st.warning(f"⚠️ Not enough stocks qualified on {current_date.date()} (found {len(screener_results)}), skipping to next day...")
                     continue
                 
                 # Sort and select top stocks
