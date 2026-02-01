@@ -96,17 +96,26 @@ def validate_tickers(tickers, progress_bar):
     
     return valid_tickers, invalid_tickers
 
-def run_screener(tickers, end_date, progress_container):
-    """Run multi-stage screening on tickers"""
+def run_screener(tickers, screening_date, progress_container, show_stage_results=False):
+    """Run multi-stage screening on tickers and optionally return stage-wise results"""
     
-    results = []
+    # Store results at each stage
+    stage_results = {
+        'stage_0_all': [],
+        'stage_1_sma': [],
+        'stage_2_volume': [],
+        'stage_3_price_mcap': [],
+        'stage_4_rsi': [],
+        'stage_5_macd': [],
+        'stage_6_momentum': []
+    }
+    
     total_tickers = len(tickers)
     
     # Calculate date ranges for different timeframes
-    # Need enough history for monthly data
-    start_date_monthly = end_date - timedelta(days=365*2)  # 2 years for monthly SMA 200
-    start_date_weekly = end_date - timedelta(days=365*2)   # 2 years for weekly SMA 200
-    start_date_daily = end_date - timedelta(days=365)      # 1 year for daily SMA 200
+    start_date_monthly = screening_date - timedelta(days=365*2)
+    start_date_weekly = screening_date - timedelta(days=365*2)
+    start_date_daily = screening_date - timedelta(days=365)
     
     for idx, ticker in enumerate(tickers):
         progress_container.progress((idx + 1) / total_tickers, 
@@ -114,15 +123,22 @@ def run_screener(tickers, end_date, progress_container):
         
         try:
             # Fetch multi-timeframe data
-            df_monthly = fetch_stock_data(ticker, start_date_monthly, end_date, interval='1mo')
-            df_weekly = fetch_stock_data(ticker, start_date_weekly, end_date, interval='1wk')
-            df_daily = fetch_stock_data(ticker, start_date_daily, end_date, interval='1d')
+            df_monthly = fetch_stock_data(ticker, start_date_monthly, screening_date, interval='1mo')
+            df_weekly = fetch_stock_data(ticker, start_date_weekly, screening_date, interval='1wk')
+            df_daily = fetch_stock_data(ticker, start_date_daily, screening_date, interval='1d')
             
             if df_daily is None or len(df_daily) < 200:
                 continue
             
             # Get current price
             current_price = df_daily.iloc[-1]['Close']
+            
+            # Record in stage 0 (all stocks with data)
+            stage_results['stage_0_all'].append({
+                'Ticker': ticker,
+                'Price': current_price,
+                'Date': screening_date
+            })
             
             # Stage 1: SMA Filter
             # Daily SMAs
@@ -131,11 +147,16 @@ def run_screener(tickers, end_date, progress_container):
             df_daily['SMA_100'] = df_daily['Close'].rolling(100).mean()
             df_daily['SMA_200'] = df_daily['Close'].rolling(200).mean()
             
+            daily_sma_20 = df_daily.iloc[-1]['SMA_20']
+            daily_sma_50 = df_daily.iloc[-1]['SMA_50']
+            daily_sma_100 = df_daily.iloc[-1]['SMA_100']
+            daily_sma_200 = df_daily.iloc[-1]['SMA_200']
+            
             daily_sma_check = (
-                current_price > df_daily.iloc[-1]['SMA_20'] and
-                current_price > df_daily.iloc[-1]['SMA_50'] and
-                current_price > df_daily.iloc[-1]['SMA_100'] and
-                current_price > df_daily.iloc[-1]['SMA_200']
+                current_price > daily_sma_20 and
+                current_price > daily_sma_50 and
+                current_price > daily_sma_100 and
+                current_price > daily_sma_200
             )
             
             if not daily_sma_check:
@@ -143,20 +164,26 @@ def run_screener(tickers, end_date, progress_container):
             
             # Weekly SMAs
             weekly_sma_check = True
+            weekly_sma_20 = weekly_sma_50 = weekly_sma_100 = weekly_sma_200 = None
+            
             if df_weekly is not None and len(df_weekly) >= 200:
                 df_weekly['SMA_20'] = df_weekly['Close'].rolling(20).mean()
                 df_weekly['SMA_50'] = df_weekly['Close'].rolling(50).mean()
                 df_weekly['SMA_100'] = df_weekly['Close'].rolling(100).mean()
                 df_weekly['SMA_200'] = df_weekly['Close'].rolling(200).mean()
                 
+                weekly_sma_20 = df_weekly.iloc[-1]['SMA_20']
+                weekly_sma_50 = df_weekly.iloc[-1]['SMA_50']
+                weekly_sma_100 = df_weekly.iloc[-1]['SMA_100']
+                weekly_sma_200 = df_weekly.iloc[-1]['SMA_200']
+                
                 weekly_sma_check = (
-                    current_price > df_weekly.iloc[-1]['SMA_20'] and
-                    current_price > df_weekly.iloc[-1]['SMA_50'] and
-                    current_price > df_weekly.iloc[-1]['SMA_100'] and
-                    current_price > df_weekly.iloc[-1]['SMA_200']
+                    current_price > weekly_sma_20 and
+                    current_price > weekly_sma_50 and
+                    current_price > weekly_sma_100 and
+                    current_price > weekly_sma_200
                 )
             else:
-                # Must have at least weekly SMA 200
                 continue
             
             if not weekly_sma_check:
@@ -165,40 +192,71 @@ def run_screener(tickers, end_date, progress_container):
             # Monthly SMAs
             monthly_sma_check = True
             has_monthly_sma_20 = False
+            monthly_sma_20 = monthly_sma_50 = monthly_sma_100 = monthly_sma_200 = None
             
             if df_monthly is not None and len(df_monthly) >= 20:
                 df_monthly['SMA_20'] = df_monthly['Close'].rolling(20).mean()
+                monthly_sma_20 = df_monthly.iloc[-1]['SMA_20']
                 has_monthly_sma_20 = True
                 
-                if pd.notna(df_monthly.iloc[-1]['SMA_20']):
-                    monthly_sma_check = current_price > df_monthly.iloc[-1]['SMA_20']
+                if pd.notna(monthly_sma_20):
+                    monthly_sma_check = current_price > monthly_sma_20
                     
-                    # Check other monthly SMAs if available
                     if len(df_monthly) >= 50:
                         df_monthly['SMA_50'] = df_monthly['Close'].rolling(50).mean()
-                        if pd.notna(df_monthly.iloc[-1]['SMA_50']):
-                            monthly_sma_check = monthly_sma_check and (current_price > df_monthly.iloc[-1]['SMA_50'])
+                        monthly_sma_50 = df_monthly.iloc[-1]['SMA_50']
+                        if pd.notna(monthly_sma_50):
+                            monthly_sma_check = monthly_sma_check and (current_price > monthly_sma_50)
                     
                     if len(df_monthly) >= 100:
                         df_monthly['SMA_100'] = df_monthly['Close'].rolling(100).mean()
-                        if pd.notna(df_monthly.iloc[-1]['SMA_100']):
-                            monthly_sma_check = monthly_sma_check and (current_price > df_monthly.iloc[-1]['SMA_100'])
+                        monthly_sma_100 = df_monthly.iloc[-1]['SMA_100']
+                        if pd.notna(monthly_sma_100):
+                            monthly_sma_check = monthly_sma_check and (current_price > monthly_sma_100)
                     
                     if len(df_monthly) >= 200:
                         df_monthly['SMA_200'] = df_monthly['Close'].rolling(200).mean()
-                        if pd.notna(df_monthly.iloc[-1]['SMA_200']):
-                            monthly_sma_check = monthly_sma_check and (current_price > df_monthly.iloc[-1]['SMA_200'])
+                        monthly_sma_200 = df_monthly.iloc[-1]['SMA_200']
+                        if pd.notna(monthly_sma_200):
+                            monthly_sma_check = monthly_sma_check and (current_price > monthly_sma_200)
             
-            # Must have monthly SMA 20
             if not has_monthly_sma_20 or not monthly_sma_check:
                 continue
             
+            # Record Stage 1 pass
+            stage_results['stage_1_sma'].append({
+                'Ticker': ticker,
+                'Price': current_price,
+                'Daily_SMA_20': daily_sma_20,
+                'Daily_SMA_50': daily_sma_50,
+                'Daily_SMA_100': daily_sma_100,
+                'Daily_SMA_200': daily_sma_200,
+                'Weekly_SMA_20': weekly_sma_20,
+                'Weekly_SMA_50': weekly_sma_50,
+                'Weekly_SMA_100': weekly_sma_100,
+                'Weekly_SMA_200': weekly_sma_200,
+                'Monthly_SMA_20': monthly_sma_20,
+                'Monthly_SMA_50': monthly_sma_50,
+                'Monthly_SMA_100': monthly_sma_100,
+                'Monthly_SMA_200': monthly_sma_200,
+                'Date': screening_date
+            })
+            
             # Stage 2: Volume Filter
             df_daily['Volume_SMA_20'] = df_daily['Volume'].rolling(20).mean()
-            volume_check = df_daily.iloc[-1]['Volume_SMA_20'] > 100000
+            volume_sma_20 = df_daily.iloc[-1]['Volume_SMA_20']
+            volume_check = volume_sma_20 > 100000
             
             if not volume_check:
                 continue
+            
+            # Record Stage 2 pass
+            stage_results['stage_2_volume'].append({
+                'Ticker': ticker,
+                'Price': current_price,
+                'Volume_SMA_20': volume_sma_20,
+                'Date': screening_date
+            })
             
             # Stage 3: Price and Market Cap Filter
             if current_price >= 5000:
@@ -208,15 +266,21 @@ def run_screener(tickers, end_date, progress_container):
             if market_cap < 500:
                 continue
             
+            # Record Stage 3 pass
+            stage_results['stage_3_price_mcap'].append({
+                'Ticker': ticker,
+                'Price': current_price,
+                'Market_Cap_Cr': market_cap,
+                'Date': screening_date
+            })
+            
             # Stage 4: RSI Filter
-            # Daily RSI
             df_daily['RSI'] = calculate_rsi(df_daily['Close'], 14)
             daily_rsi = df_daily.iloc[-1]['RSI']
             
             if pd.isna(daily_rsi) or daily_rsi <= 50:
                 continue
             
-            # Weekly RSI
             if df_weekly is not None and len(df_weekly) >= 14:
                 df_weekly['RSI'] = calculate_rsi(df_weekly['Close'], 14)
                 weekly_rsi = df_weekly.iloc[-1]['RSI']
@@ -225,7 +289,6 @@ def run_screener(tickers, end_date, progress_container):
             else:
                 continue
             
-            # Monthly RSI
             if df_monthly is not None and len(df_monthly) >= 14:
                 df_monthly['RSI'] = calculate_rsi(df_monthly['Close'], 14)
                 monthly_rsi = df_monthly.iloc[-1]['RSI']
@@ -234,15 +297,23 @@ def run_screener(tickers, end_date, progress_container):
             else:
                 continue
             
+            # Record Stage 4 pass
+            stage_results['stage_4_rsi'].append({
+                'Ticker': ticker,
+                'Price': current_price,
+                'Daily_RSI': daily_rsi,
+                'Weekly_RSI': weekly_rsi,
+                'Monthly_RSI': monthly_rsi,
+                'Date': screening_date
+            })
+            
             # Stage 5: MACD Histogram Filter
-            # Daily MACD
             df_daily['MACD_Hist'] = calculate_macd(df_daily['Close'])
             daily_macd = df_daily.iloc[-1]['MACD_Hist']
             
             if pd.isna(daily_macd) or daily_macd <= 0:
                 continue
             
-            # Weekly MACD
             if df_weekly is not None and len(df_weekly) >= 26:
                 df_weekly['MACD_Hist'] = calculate_macd(df_weekly['Close'])
                 weekly_macd = df_weekly.iloc[-1]['MACD_Hist']
@@ -251,7 +322,6 @@ def run_screener(tickers, end_date, progress_container):
             else:
                 continue
             
-            # Monthly MACD
             if df_monthly is not None and len(df_monthly) >= 26:
                 df_monthly['MACD_Hist'] = calculate_macd(df_monthly['Close'])
                 monthly_macd = df_monthly.iloc[-1]['MACD_Hist']
@@ -260,6 +330,16 @@ def run_screener(tickers, end_date, progress_container):
             else:
                 continue
             
+            # Record Stage 5 pass
+            stage_results['stage_5_macd'].append({
+                'Ticker': ticker,
+                'Price': current_price,
+                'Daily_MACD': daily_macd,
+                'Weekly_MACD': weekly_macd,
+                'Monthly_MACD': monthly_macd,
+                'Date': screening_date
+            })
+            
             # Stage 6: Calculate 15-day return
             if len(df_daily) >= 15:
                 price_15_days_ago = df_daily.iloc[-15]['Close']
@@ -267,29 +347,36 @@ def run_screener(tickers, end_date, progress_container):
             else:
                 return_15d = 0
             
-            # Only include stocks with positive returns
             if return_15d <= 0:
                 continue
             
-            # Stock passed all filters
-            results.append({
+            # Record Stage 6 pass (final)
+            stage_results['stage_6_momentum'].append({
                 'Ticker': ticker,
                 'Current_Price': current_price,
                 'Market_Cap_Cr': market_cap,
-                'Volume_SMA_20': df_daily.iloc[-1]['Volume_SMA_20'],
+                'Volume_SMA_20': volume_sma_20,
                 'Daily_RSI': daily_rsi,
                 'Weekly_RSI': weekly_rsi,
                 'Monthly_RSI': monthly_rsi,
                 'Daily_MACD': daily_macd,
                 'Weekly_MACD': weekly_macd,
                 'Monthly_MACD': monthly_macd,
-                'Return_15D_Pct': return_15d
+                'Return_15D_Pct': return_15d,
+                'Date': screening_date
             })
             
         except Exception as e:
             continue
     
-    return pd.DataFrame(results)
+    # Convert final results to DataFrame
+    final_df = pd.DataFrame(stage_results['stage_6_momentum'])
+    
+    if show_stage_results:
+        return final_df, stage_results
+    else:
+        return final_df
+
 
 # --- Page Config ---
 st.set_page_config(layout="wide", page_title="Smart Momentum Basket System", page_icon="🎯")
@@ -458,27 +545,87 @@ if st.button("🔍 Run Screener and Backtest", type="primary"):
         with st.expander(f"⚠️ {len(invalid_tickers)} Invalid/Unavailable Tickers"):
             st.write(invalid_tickers)
     
-    # Step 2: Run Screener
-    st.markdown("### Step 2: Multi-Stage Screening")
+    # Step 2: Run Screener on Start Date
+    st.markdown(f"### Step 2: Multi-Stage Screening (Date: {START_DATE})")
+    st.info(f"Running screener on data as of {START_DATE}")
     screening_progress = st.empty()
     
-    qualified_stocks = run_screener(valid_tickers, END_DATE, screening_progress)
+    qualified_stocks, stage_results = run_screener(valid_tickers, pd.to_datetime(START_DATE), screening_progress, show_stage_results=True)
     
+    # Display stage-wise results
+    st.markdown("#### Stage-wise Filtering Results")
+    
+    # Stage 0: All stocks with data
+    st.markdown(f"**Stage 0: Initial Stocks** - {len(stage_results['stage_0_all'])} stocks")
+    
+    # Stage 1: SMA Filter
+    if stage_results['stage_1_sma']:
+        with st.expander(f"**Stage 1: SMA Filter** - {len(stage_results['stage_1_sma'])} stocks qualified"):
+            sma_df = pd.DataFrame(stage_results['stage_1_sma'])
+            sma_display_cols = ['Ticker', 'Price', 'Daily_SMA_20', 'Daily_SMA_50', 'Daily_SMA_100', 'Daily_SMA_200',
+                               'Weekly_SMA_20', 'Weekly_SMA_50', 'Weekly_SMA_100', 'Weekly_SMA_200',
+                               'Monthly_SMA_20', 'Monthly_SMA_50', 'Monthly_SMA_100', 'Monthly_SMA_200', 'Date']
+            st.dataframe(sma_df[sma_display_cols], width='stretch')
+            st.info(f"✅ {len(stage_results['stage_1_sma'])} stocks have price > all SMAs (Daily, Weekly, Monthly)")
+    else:
+        st.warning("❌ No stocks passed SMA filter")
+        st.stop()
+    
+    # Stage 2: Volume Filter
+    if stage_results['stage_2_volume']:
+        with st.expander(f"**Stage 2: Volume Filter** - {len(stage_results['stage_2_volume'])} stocks qualified"):
+            vol_df = pd.DataFrame(stage_results['stage_2_volume'])
+            st.dataframe(vol_df, width='stretch')
+            st.info(f"✅ {len(stage_results['stage_2_volume'])} stocks have Volume SMA 20 > 100,000")
+    else:
+        st.warning("❌ No stocks passed Volume filter")
+        st.stop()
+    
+    # Stage 3: Price & Market Cap Filter
+    if stage_results['stage_3_price_mcap']:
+        with st.expander(f"**Stage 3: Price & Market Cap Filter** - {len(stage_results['stage_3_price_mcap'])} stocks qualified"):
+            price_mcap_df = pd.DataFrame(stage_results['stage_3_price_mcap'])
+            st.dataframe(price_mcap_df, width='stretch')
+            st.info(f"✅ {len(stage_results['stage_3_price_mcap'])} stocks have Price < ₹5000 and Market Cap > ₹500 Cr")
+    else:
+        st.warning("❌ No stocks passed Price & Market Cap filter")
+        st.stop()
+    
+    # Stage 4: RSI Filter
+    if stage_results['stage_4_rsi']:
+        with st.expander(f"**Stage 4: RSI Filter** - {len(stage_results['stage_4_rsi'])} stocks qualified"):
+            rsi_df = pd.DataFrame(stage_results['stage_4_rsi'])
+            st.dataframe(rsi_df, width='stretch')
+            st.info(f"✅ {len(stage_results['stage_4_rsi'])} stocks have Monthly/Weekly RSI > 60 and Daily RSI > 50")
+    else:
+        st.warning("❌ No stocks passed RSI filter")
+        st.stop()
+    
+    # Stage 5: MACD Filter
+    if stage_results['stage_5_macd']:
+        with st.expander(f"**Stage 5: MACD Histogram Filter** - {len(stage_results['stage_5_macd'])} stocks qualified"):
+            macd_df = pd.DataFrame(stage_results['stage_5_macd'])
+            st.dataframe(macd_df, width='stretch')
+            st.info(f"✅ {len(stage_results['stage_5_macd'])} stocks have all MACD Histograms > 0")
+    else:
+        st.warning("❌ No stocks passed MACD filter")
+        st.stop()
+    
+    # Stage 6: Momentum Filter (Final)
     if qualified_stocks.empty:
-        st.error("❌ No stocks passed all screening criteria.")
+        st.error("❌ No stocks passed all screening criteria (including positive 15-day return).")
         st.stop()
     
     # Sort by 15-day return
     qualified_stocks = qualified_stocks.sort_values('Return_15D_Pct', ascending=False).reset_index(drop=True)
     
-    st.success(f"✅ {len(qualified_stocks)} stocks passed all filters!")
+    with st.expander(f"**Stage 6: Momentum Filter (Final)** - {len(qualified_stocks)} stocks qualified", expanded=True):
+        display_cols = ['Ticker', 'Current_Price', 'Market_Cap_Cr', 'Return_15D_Pct', 
+                       'Daily_RSI', 'Weekly_RSI', 'Monthly_RSI', 'Daily_MACD', 'Weekly_MACD', 'Monthly_MACD', 'Date']
+        st.dataframe(qualified_stocks[display_cols], width='stretch')
+        st.success(f"✅ {len(qualified_stocks)} stocks have positive 15-day return!")
     
-    # Display qualified stocks
-    st.markdown("### Qualified Stocks")
-    display_cols = ['Ticker', 'Current_Price', 'Market_Cap_Cr', 'Return_15D_Pct', 
-                   'Daily_RSI', 'Weekly_RSI', 'Monthly_RSI']
-    st.dataframe(qualified_stocks[display_cols], width='stretch')
-    
+
     # Step 3: Stock Selection
     st.markdown("### Step 3: Select Stocks for Portfolio")
     
