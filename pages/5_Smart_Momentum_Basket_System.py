@@ -739,13 +739,19 @@ if st.button("🔍 Run Screener and Backtest", type="primary"):
                     if len(screener_results) > 0:
                         st.dataframe(screener_results[['Ticker', 'Current_Price', 'Return_15D_Pct', 'Daily_RSI', 'Weekly_RSI', 'Monthly_RSI']], width='stretch')
                 
-                if screener_results.empty or len(screener_results) < 5:
-                    st.warning(f"⚠️ Not enough stocks qualified on {current_date.date()} (found {len(screener_results)}), skipping to next day...")
+                # Allow entry with at least 1 stock (changed from 5 to be more flexible)
+                if screener_results.empty:
+                    st.warning(f"⚠️ No stocks qualified on {current_date.date()}, skipping to next day...")
                     continue
                 
                 # Sort and select top stocks
                 screener_results = screener_results.sort_values('Return_15D_Pct', ascending=False).reset_index(drop=True)
-                selected_for_entry = screener_results.head(num_stocks).copy()
+                
+                # Select stocks (use all qualified stocks if less than num_stocks)
+                stocks_to_select = min(num_stocks, len(screener_results))
+                selected_for_entry = screener_results.head(stocks_to_select).copy()
+                
+                st.success(f"✅ Selected {len(selected_for_entry)} stocks for Cycle {current_cycle}")
                 
                 # Calculate allocation
                 total_ret = selected_for_entry['Return_15D_Pct'].sum()
