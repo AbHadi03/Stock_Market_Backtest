@@ -113,9 +113,13 @@ def run_screener(tickers, screening_date, progress_container, show_stage_results
     total_tickers = len(tickers)
     
     # Calculate date ranges for different timeframes
-    start_date_monthly = screening_date - timedelta(days=365*2)
-    start_date_weekly = screening_date - timedelta(days=365*2)
-    start_date_daily = screening_date - timedelta(days=365)
+    # Need enough historical data to calculate SMA 200 properly
+    # Monthly: 200 months = ~16.7 years, add buffer = 18 years
+    # Weekly: 200 weeks = ~3.85 years, add buffer = 5 years
+    # Daily: 200 trading days = ~10 months (260 trading days/year), add buffer = 2 years
+    start_date_monthly = screening_date - timedelta(days=365*18)  # 18 years for monthly SMA 200
+    start_date_weekly = screening_date - timedelta(days=365*5)    # 5 years for weekly SMA 200
+    start_date_daily = screening_date - timedelta(days=365*2)     # 2 years for daily SMA 200
     
     for idx, ticker in enumerate(tickers):
         progress_container.progress((idx + 1) / total_tickers, 
@@ -127,7 +131,17 @@ def run_screener(tickers, screening_date, progress_container, show_stage_results
             df_weekly = fetch_stock_data(ticker, start_date_weekly, screening_date, interval='1wk')
             df_daily = fetch_stock_data(ticker, start_date_daily, screening_date, interval='1d')
             
+            # Validate minimum data requirements
+            # Daily: Need at least 200 data points for SMA 200
             if df_daily is None or len(df_daily) < 200:
+                continue
+            
+            # Weekly: Need at least 200 data points for SMA 200
+            if df_weekly is None or len(df_weekly) < 200:
+                continue
+            
+            # Monthly: Need at least 20 data points for SMA 20 (minimum requirement)
+            if df_monthly is None or len(df_monthly) < 20:
                 continue
             
             # Get current price
