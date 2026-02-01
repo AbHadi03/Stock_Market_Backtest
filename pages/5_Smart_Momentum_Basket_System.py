@@ -856,10 +856,10 @@ if st.button("🔍 Run Screener and Backtest", type="primary"):
                 current_portfolio.at[i, 'Current_Value'] = df.iloc[-1]['Close'] * stock['Quantity']
                 current_portfolio.at[i, 'Unrealized_PnL'] = (df.iloc[-1]['Close'] - stock['Entry_Price']) * stock['Quantity']
         
-        open_cols = ['Ticker', 'Entry_Price', 'Quantity', 'Invested', 'Current_Price', 'Current_Value', 'Unrealized_PnL']
+        open_cols = ['Ticker', 'Entry_Price', 'Quantity', 'Allocated_Amount', 'Current_Price', 'Current_Value', 'Unrealized_PnL']
         st.dataframe(current_portfolio[open_cols], width='stretch')
         
-        total_invested = current_portfolio['Invested'].sum()
+        total_invested = current_portfolio['Allocated_Amount'].sum()
         total_current = current_portfolio['Current_Value'].sum()
         total_unrealized = current_portfolio['Unrealized_PnL'].sum()
         
