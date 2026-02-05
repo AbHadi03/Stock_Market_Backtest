@@ -128,11 +128,13 @@ with col1:
     )
 
 with col2:
+    USE_STOP_LOSS = st.checkbox("Enable Stop Loss", value=True)
     STOP_LOSS_PCT = st.number_input(
         "Stop Loss %", 
         value=5.0, 
         step=0.5,
-        help="Stop loss percentage to exit the trade."
+        help="Stop loss percentage to exit the trade.",
+        disabled=not USE_STOP_LOSS
     )
     CHARGES_PER_TRADE = st.number_input(
         "Charges Per Trade (Rs)", 
@@ -278,22 +280,27 @@ if st.button("Run Backtest", type="primary"):
                 exit_action = None
                 exit_price = 0
                 
-                # Check if Gap down below SL at Open
-                if open_price <= sl_price:
-                    exit_action = "STOP LOSS"
-                    exit_price = open_price
-                # Check if Low hit SL during the period
-                elif low_price <= sl_price:
-                    exit_action = "STOP LOSS"
-                    exit_price = sl_price
-                # Check if Gap up above TP at Open
-                elif open_price >= tp_price:
-                    exit_action = "TAKE PROFIT"
-                    exit_price = open_price
-                # Check if High hit TP during the period
-                elif high_price >= tp_price:
-                    exit_action = "TAKE PROFIT"
-                    exit_price = tp_price
+                # Check for Stop Loss if enabled
+                if USE_STOP_LOSS:
+                    # Check if Gap down below SL at Open
+                    if open_price <= sl_price:
+                        exit_action = "STOP LOSS"
+                        exit_price = open_price
+                    # Check if Low hit SL during the period
+                    elif low_price <= sl_price:
+                        exit_action = "STOP LOSS"
+                        exit_price = sl_price
+                
+                # Check for Take Profit
+                if not exit_action:
+                    # Check if Gap up above TP at Open
+                    if open_price >= tp_price:
+                        exit_action = "TAKE PROFIT"
+                        exit_price = open_price
+                    # Check if High hit TP during the period
+                    elif high_price >= tp_price:
+                        exit_action = "TAKE PROFIT"
+                        exit_price = tp_price
                 
                 if exit_action:
                     # Execute Exit
@@ -368,6 +375,7 @@ if st.button("Run Backtest", type="primary"):
             'end_date': END_DATE,
             'investment': INVESTMENT,
             'tp_pct': TAKE_PROFIT_PCT,
+            'use_stop_loss': USE_STOP_LOSS,
             'sl_pct': STOP_LOSS_PCT,
             'charges': CHARGES_PER_TRADE,
             'timeframe': TIMEFRAME
@@ -391,6 +399,7 @@ if 'p6_results' in st.session_state and st.session_state.p6_results:
     run_end_date = data.get('end_date', END_DATE)
     run_investment = data.get('investment', INVESTMENT)
     run_tp_pct = data.get('tp_pct', TAKE_PROFIT_PCT)
+    run_use_sl = data.get('use_stop_loss', True)
     run_sl_pct = data.get('sl_pct', STOP_LOSS_PCT)
     run_charges = data.get('charges', CHARGES_PER_TRADE)
     run_timeframe = data.get('timeframe', TIMEFRAME)
@@ -429,10 +438,15 @@ if 'p6_results' in st.session_state and st.session_state.p6_results:
     col_m6.metric("Wins / Losses", f"{win_count} / {loss_count}")
     col_m7.metric("Open Value", f"₹{open_trade_val:,.2f}" if position else "₹0.00")
 
-    # TradingView Link
+    # Links
     tv_symbol = stock_symbol.replace(".NS", "")
     tv_url = f"https://www.tradingview.com/chart/?symbol=NSE%3A{tv_symbol}"
-    st.link_button("View Chart on TradingView", tv_url)
+    
+    col_l1, col_l2 = st.columns([1, 4])
+    with col_l1:
+        st.link_button("View Chart on TradingView", tv_url)
+    with col_l2:
+        st.link_button("Chartlink Screener", "https://chartink.com/screener/golden-gate-by-sunil-minglani-2")
 
     # --- Download Analytics ---
     download_data = {
@@ -443,7 +457,8 @@ if 'p6_results' in st.session_state and st.session_state.p6_results:
         "End Date": [run_end_date],
         "Investment": [run_investment],
         "Take Profit %": [run_tp_pct],
-        "Stop Loss %": [run_sl_pct],
+        "Use Stop Loss": [run_use_sl],
+        "Stop Loss %": [run_sl_pct if run_use_sl else "N/A"],
         "Charges Per Trade": [float(round(run_charges, 2))],
         "Total PnL": [float(round(net_profit, 2))],
         "Total Trades": [total_trades],
