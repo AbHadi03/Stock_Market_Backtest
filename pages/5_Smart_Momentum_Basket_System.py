@@ -496,7 +496,7 @@ if 'date_preset' not in st.session_state:
 
 def update_dates():
     preset = st.session_state.p5_preset_radio
-    end = datetime.today()
+    end = datetime.today().date()
     if preset == "7 Days":
         start = end - timedelta(days=7)
     elif preset == "15 Days":
@@ -525,15 +525,15 @@ st.radio(
 )
 
 if 'p5_start_date' not in st.session_state:
-    st.session_state.p5_start_date = datetime.today() - timedelta(days=365)
+    st.session_state.p5_start_date = datetime.today().date() - timedelta(days=365)
 if 'p5_end_date' not in st.session_state:
-    st.session_state.p5_end_date = datetime.today()
+    st.session_state.p5_end_date = datetime.today().date()
 
 col_d1, col_d2 = st.columns(2)
 with col_d1:
     START_DATE = st.date_input("Start Date", key="p5_start_date")
 with col_d2:
-    END_DATE = st.date_input("End Date", key="p5_end_date", max_value=datetime.today())
+    END_DATE = st.date_input("End Date", key="p5_end_date", max_value=datetime.today().date())
 
 # --- Run Screener ---
 if st.button("🔍 Run Screener and Backtest", type="primary"):

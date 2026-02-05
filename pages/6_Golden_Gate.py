@@ -158,7 +158,7 @@ if 'date_preset' not in st.session_state:
 
 def update_dates():
     preset = st.session_state.p6_preset_radio
-    end = datetime.today()
+    end = datetime.today().date()
     if preset == "7 Days":
         start = end - timedelta(days=7)
     elif preset == "15 Days":
@@ -192,14 +192,14 @@ st.radio(
 
 # Initialize defaults if needed
 if 'p6_start_date' not in st.session_state:
-    st.session_state.p6_start_date = datetime.today() - timedelta(days=730)
+    st.session_state.p6_start_date = datetime.today().date() - timedelta(days=730)
 if 'p6_end_date' not in st.session_state:
-    st.session_state.p6_end_date = datetime.today()
+    st.session_state.p6_end_date = datetime.today().date()
 
 with col_s1:
     START_DATE = st.date_input("Start Date", key="p6_start_date")
 with col_s2:
-    END_DATE = st.date_input("End Date", key="p6_end_date", max_value=datetime.today())
+    END_DATE = st.date_input("End Date", key="p6_end_date", max_value=datetime.today().date())
 
 with col_s3:
     SELECTED_STOCK = st.text_input("Stock Name", value="RELIANCE", help="Enter stock symbol (e.g. TCS, INFY)")
