@@ -150,6 +150,7 @@ with col3:
         index=0,
         help="Select the timeframe for SMA calculation."
     )
+    st.link_button("Chartlink Screener", "https://chartink.com/screener/golden-gate-by-sunil-minglani-2")
 
 st.markdown("### Stock Selection")
 col_s1, col_s2, col_s3 = st.columns(3)
@@ -441,12 +442,7 @@ if 'p6_results' in st.session_state and st.session_state.p6_results:
     # Links
     tv_symbol = stock_symbol.replace(".NS", "")
     tv_url = f"https://www.tradingview.com/chart/?symbol=NSE%3A{tv_symbol}"
-    
-    col_l1, col_l2 = st.columns([1, 4])
-    with col_l1:
-        st.link_button("View Chart on TradingView", tv_url)
-    with col_l2:
-        st.link_button("Chartlink Screener", "https://chartink.com/screener/golden-gate-by-sunil-minglani-2")
+    st.link_button("View Chart on TradingView", tv_url)
 
     # --- Download Analytics ---
     download_data = {
