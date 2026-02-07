@@ -111,50 +111,6 @@ with st.expander("📖 Strategy Description & Rules"):
     """)
 
 # --- Inputs ---
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    INVESTMENT = st.number_input(
-        "Investment (INR)", 
-        value=10000.0, 
-        step=1000.0,
-        help="Amount to invest per trade."
-    )
-    TAKE_PROFIT_PCT = st.number_input(
-        "Take Profit %", 
-        value=10.0, 
-        step=0.5,
-        help="Target profit percentage to exit the trade."
-    )
-
-with col2:
-    USE_STOP_LOSS = st.checkbox("Enable Stop Loss", value=True)
-    STOP_LOSS_PCT = st.number_input(
-        "Stop Loss %", 
-        value=5.0, 
-        step=0.5,
-        help="Stop loss percentage to exit the trade.",
-        disabled=not USE_STOP_LOSS
-    )
-    CHARGES_PER_TRADE = st.number_input(
-        "Charges Per Trade (Rs)", 
-        value=25.0, 
-        step=5.0,
-        help="Transaction charges per trade (entry + exit combined)."
-    )
-
-with col3:
-    TIMEFRAME = st.selectbox(
-        "Timeframe",
-        ["Daily", "Weekly", "Monthly"],
-        index=0,
-        help="Select the timeframe for SMA calculation."
-    )
-    st.link_button("Chartlink Screener", "https://chartink.com/screener/golden-gate-by-sunil-minglani-2")
-
-st.markdown("### Stock Selection")
-col_s1, col_s2, col_s3 = st.columns(3)
-
 # Date Presets logic
 if 'date_preset' not in st.session_state:
     st.session_state.date_preset = "1 Year"
@@ -184,6 +140,12 @@ def update_dates():
     st.session_state.p6_start_date = start
     st.session_state.p6_end_date = end
 
+# Initialize defaults if needed
+if 'p6_start_date' not in st.session_state:
+    st.session_state.p6_start_date = datetime.today().date() - timedelta(days=730)
+if 'p6_end_date' not in st.session_state:
+    st.session_state.p6_end_date = datetime.today().date()
+
 st.radio(
     "Quick Select Range", 
     ["7 Days", "15 Days", "30 Days", "3 Months", "6 Months", "1 Year", "2 Years", "5 Years"], 
@@ -193,19 +155,62 @@ st.radio(
     index=6  # Default 2 Years for better SMA calculation
 )
 
-# Initialize defaults if needed
-if 'p6_start_date' not in st.session_state:
-    st.session_state.p6_start_date = datetime.today().date() - timedelta(days=730)
-if 'p6_end_date' not in st.session_state:
-    st.session_state.p6_end_date = datetime.today().date()
-
-with col_s1:
-    START_DATE = st.date_input("Start Date", key="p6_start_date")
-with col_s2:
-    END_DATE = st.date_input("End Date", key="p6_end_date", max_value=datetime.today().date())
-
-with col_s3:
+# Core Inputs Row 1
+row1_col1, row1_col2, row1_col3 = st.columns(3)
+with row1_col1:
     SELECTED_STOCK = st.text_input("Stock Name", value="RELIANCE", help="Enter stock symbol (e.g. TCS, INFY)")
+with row1_col2:
+    TIMEFRAME = st.selectbox(
+        "Timeframe",
+        ["Daily", "Weekly", "Monthly"],
+        index=0,
+        help="Select the timeframe for SMA calculation."
+    )
+with row1_col3:
+    INVESTMENT = st.number_input(
+        "Investment (INR)", 
+        value=10000.0, 
+        step=1000.0,
+        help="Amount to invest per trade."
+    )
+
+# Core Inputs Row 2
+row2_col1, row2_col2, row2_col3 = st.columns(3)
+with row2_col1:
+    TAKE_PROFIT_PCT = st.number_input(
+        "Take Profit %", 
+        value=10.0, 
+        step=0.5,
+        help="Target profit percentage to exit the trade."
+    )
+with row2_col2:
+    # Use a container or grouped logic for SL
+    USE_STOP_LOSS = st.checkbox("Enable Stop Loss", value=True)
+    STOP_LOSS_PCT = st.number_input(
+        "Stop Loss %", 
+        value=5.0, 
+        step=0.5,
+        help="Stop loss percentage to exit the trade.",
+        disabled=not USE_STOP_LOSS
+    )
+with row2_col3:
+    CHARGES_PER_TRADE = st.number_input(
+        "Charges Per Trade (Rs)", 
+        value=25.0, 
+        step=5.0,
+        help="Transaction charges per trade (entry + exit combined)."
+    )
+
+# Core Inputs Row 3
+row3_col1, row3_col2, row3_col3 = st.columns(3)
+with row3_col1:
+    START_DATE = st.date_input("Start Date", key="p6_start_date")
+with row3_col2:
+    END_DATE = st.date_input("End Date", key="p6_end_date", max_value=datetime.today().date())
+with row3_col3:
+    st.write("") # Spacer for alignment
+    st.write("")
+    st.link_button("Chartlink Screener", "https://chartink.com/screener/golden-gate-by-sunil-minglani-2")
 
 # --- Run Backtest ---
 if st.button("Run Backtest", type="primary"):
@@ -219,8 +224,14 @@ if st.button("Run Backtest", type="primary"):
     try:
         # Fetch Data with buffer for SMA calculation
         # Need extra data for 200-period SMA
-        buffer_days = 1000  # Sufficient buffer for 200 periods even on weekly/monthly
-        fetch_start_date = START_DATE - timedelta(days=buffer_days)
+        if TIMEFRAME == "Weekly":
+            buffer_days = 200 * 7 + 100 # ~1500 days
+        elif TIMEFRAME == "Monthly":
+            buffer_days = 200 * 31 + 100 # ~6300 days
+        else: # Daily
+            buffer_days = 200 * 1.5 + 50 # ~350 days
+        
+        fetch_start_date = START_DATE - timedelta(days=int(buffer_days))
         
         df = yf.download(SELECTED_STOCK, start=fetch_start_date, end=END_DATE, progress=False)
         
@@ -253,11 +264,21 @@ if st.button("Run Backtest", type="primary"):
             st.error("No data available for the selected date range.")
             st.session_state.p6_results = None
             st.stop()
+            
+        # Check if SMA_200 is available for the desired window
+        nan_sma_count = df_resampled['SMA_200'].isna().sum()
+        if nan_sma_count == len(df_resampled):
+            st.error(f"Insufficient historical data for {SELECTED_STOCK} on {TIMEFRAME} timeframe to calculate SMA 200. Please try a more recent 'Start Date' or a stock with a longer trading history.")
+            st.session_state.p6_results = None
+            st.stop()
+        elif nan_sma_count > 0:
+            st.warning(f"Note: Backtest will start from {df_resampled.iloc[nan_sma_count]['Date'].date()} as SMA 200 requires earlier historical data for calculation.")
         
         # --- Backtest Logic ---
         results = []
         position = None  # None or dict
         total_pnl = 0
+        can_enter = True  # Flag to ensure the condition is broken before re-entry
         
         for i, row in df_resampled.iterrows():
             current_date = row['Date']
@@ -340,20 +361,25 @@ if st.button("Run Backtest", type="primary"):
                 )
                 
                 if condition:
-                    # Buy at close
-                    entry_price = float(round(close_price, 2))
-                    quantity = float(round(INVESTMENT / entry_price, 2))
-                    
-                    position = {
-                        'entry_date': current_date,
-                        'entry_price': entry_price,
-                        'quantity': quantity,
-                        'sma_10': float(round(row['SMA_10'], 2)),
-                        'sma_20': float(round(row['SMA_20'], 2)),
-                        'sma_50': float(round(row['SMA_50'], 2)),
-                        'sma_100': float(round(row['SMA_100'], 2)),
-                        'sma_200': float(round(row['SMA_200'], 2))
-                    }
+                    if can_enter:
+                        # Buy at close
+                        entry_price = float(round(close_price, 2))
+                        quantity = float(round(INVESTMENT / entry_price, 2))
+                        
+                        position = {
+                            'entry_date': current_date,
+                            'entry_price': entry_price,
+                            'quantity': quantity,
+                            'sma_10': float(round(row['SMA_10'], 2)),
+                            'sma_20': float(round(row['SMA_20'], 2)),
+                            'sma_50': float(round(row['SMA_50'], 2)),
+                            'sma_100': float(round(row['SMA_100'], 2)),
+                            'sma_200': float(round(row['SMA_200'], 2))
+                        }
+                        can_enter = False  # Set to False upon entry
+                else:
+                    # Condition is broken, reset can_enter to True
+                    can_enter = True
         
         # Handle open position at end
         open_trade_val = 0
@@ -477,6 +503,27 @@ if 'p6_results' in st.session_state and st.session_state.p6_results:
     
     st.markdown("---")
     
+    # --- Open Trades Table ---
+    if position:
+        st.subheader("📌 Open Trade")
+        # Use the latest close price from the resampled data
+        current_price = df_slice.iloc[-1]['Close']
+        open_pnl = float(round((current_price - position['entry_price']) * position['quantity'], 2))
+        open_pnl_pct = float(round((current_price / position['entry_price'] - 1) * 100, 2))
+        
+        open_trade_data = {
+            "Symbol": [stock_symbol],
+            "Entry Date": [position['entry_date'].date()],
+            "Entry Price": [float(round(position['entry_price'], 2))],
+            "Qty": [position['quantity']],
+            "Current Price": [float(round(current_price, 2))],
+            "Current Value": [float(round(position['quantity'] * current_price, 2))],
+            "PnL": [open_pnl],
+            "PnL %": [f"{open_pnl_pct:.2f}%"]
+        }
+        st.dataframe(pd.DataFrame(open_trade_data), width='stretch', hide_index=True)
+        st.markdown("---")
+
     if not results_df.empty:
         # Trade History
         st.subheader("Trade History")
