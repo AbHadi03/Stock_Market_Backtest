@@ -146,14 +146,22 @@ if 'p6_start_date' not in st.session_state:
 if 'p6_end_date' not in st.session_state:
     st.session_state.p6_end_date = datetime.today().date()
 
-st.radio(
-    "Quick Select Range", 
-    ["7 Days", "15 Days", "30 Days", "3 Months", "6 Months", "1 Year", "2 Years", "5 Years"], 
-    horizontal=True, 
-    key="p6_preset_radio",
-    on_change=update_dates,
-    index=6  # Default 2 Years for better SMA calculation
-)
+# Date Selection and SL Toggle
+col_top1, col_top2 = st.columns([4, 1])
+
+with col_top1:
+    st.radio(
+        "Quick Select Range", 
+        ["7 Days", "15 Days", "30 Days", "3 Months", "6 Months", "1 Year", "2 Years", "5 Years"], 
+        horizontal=True, 
+        key="p6_preset_radio",
+        on_change=update_dates,
+        index=6  # Default 2 Years for better SMA calculation
+    )
+
+with col_top2:
+    st.write("") # Spacer to align with radio label
+    USE_STOP_LOSS = st.checkbox("Enable Stop Loss", value=True, help="Toggle to enable or disable stop loss exit logic.")
 
 # Core Inputs Row 1
 row1_col1, row1_col2, row1_col3 = st.columns(3)
@@ -184,8 +192,6 @@ with row2_col1:
         help="Target profit percentage to exit the trade."
     )
 with row2_col2:
-    # Use a container or grouped logic for SL
-    USE_STOP_LOSS = st.checkbox("Enable Stop Loss", value=True)
     STOP_LOSS_PCT = st.number_input(
         "Stop Loss %", 
         value=5.0, 
