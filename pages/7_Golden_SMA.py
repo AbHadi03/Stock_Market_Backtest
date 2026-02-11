@@ -416,7 +416,7 @@ if 'p7_results' in st.session_state:
             "PnL": [open_pnl],
             "PnL %": [f"{open_pnl_pct:.2f}%"]
         }
-        st.dataframe(pd.DataFrame(open_trade_data), hide_index=True)
+        st.dataframe(pd.DataFrame(open_trade_data), width='stretch', hide_index=True)
         st.markdown("---")
 
     if not results_df.empty:
@@ -425,7 +425,7 @@ if 'p7_results' in st.session_state:
         display_df = results_df.copy()
         display_df['Entry Date'] = display_df['Entry Date'].dt.date
         display_df['Exit Date'] = display_df['Exit Date'].dt.date
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(display_df, width='stretch')
         
         st.markdown("---")
         
