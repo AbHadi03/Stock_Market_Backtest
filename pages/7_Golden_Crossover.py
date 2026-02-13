@@ -189,6 +189,11 @@ else:
     USE_STOP_LOSS = False
     STOP_LOSS_PCT = 100.0 # Effectively no SL
 
+with row3_col3:
+    st.write("") # Spacer for alignment
+    st.write("")
+    st.link_button("Chartlink Screener", "https://chartink.com/screener/golden-crossover-by-hadi-web")
+
 # --- Run Backtest ---
 if st.button("Run Backtest", type="primary"):
     # Auto-append .NS if not present
