@@ -63,19 +63,19 @@ def resample_to_timeframe(df, timeframe):
     return resampled.reset_index()
 
 # --- Page Config ---
-st.set_page_config(layout="wide", page_title="Golden SMA Strategy", page_icon="📈")
+st.set_page_config(layout="wide", page_title="Golden Crossover Strategy", page_icon="📈")
 
 # --- Login Check ---
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.error("Please login first from the main page")
     st.stop()
 
-st.title("📈 7 Golden SMA Strategy (SMA Crossover)")
+st.title("📈 Golden Crossover Strategy (SMA Crossover)")
 st.markdown("---")
 
 with st.expander("📖 Strategy Description & Rules"):
     st.markdown("""
-    ### 7 Golden SMA Strategy - Simple Moving Average Crossover System
+    ### Golden Crossover Strategy - Simple Moving Average Crossover System
     
     This strategy is based on the crossover of two Simple Moving Averages (SMA) to identify trend changes.
     
@@ -283,17 +283,19 @@ if st.button("Run Backtest", type="primary"):
                     pnl = float(round((exit_price - position['entry_price']) * position['quantity'] - CHARGES_PER_TRADE, 2))
                     total_pnl = float(round(total_pnl + pnl, 2))
                     
+                    duration = (row['Date'] - position['entry_date']).days
                     results.append({
-                        'Entry Date': position['entry_date'],
-                        'Exit Date': row['Date'],
                         'Symbol': SYMBOL,
-                        'Action': exit_action,
+                        'Entry Date': position['entry_date'],
                         'Entry Price': position['entry_price'],
-                        'Exit Price': float(round(exit_price, 2)),
                         'Quantity': position['quantity'],
                         'Invested': INVESTMENT,
+                        'Exit Date': row['Date'],
+                        'Exit Price': float(round(exit_price, 2)),
+                        'Action': exit_action,
                         'PnL': pnl,
-                        'Cumulative PnL': total_pnl
+                        'Cumilative PnL': total_pnl,
+                        'Duration': f"{duration} days"
                     })
                     position = None
             
@@ -492,6 +494,6 @@ if 'p7_results' in st.session_state:
         
         # Charts
         st.subheader("Equity Curve")
-        equity_df = results_df[['Exit Date', 'Cumulative PnL']].copy()
+        equity_df = results_df[['Exit Date', 'Cumilative PnL']].copy()
         equity_df = equity_df.rename(columns={'Exit Date': 'Date'})
-        st.line_chart(equity_df, x='Date', y='Cumulative PnL')
+        st.line_chart(equity_df, x='Date', y='Cumilative PnL')
