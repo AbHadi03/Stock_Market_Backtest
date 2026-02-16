@@ -91,7 +91,8 @@ with st.expander("📖 Strategy Description & Rules"):
     #### 🚪 Exit Rules
     1. **Take Profit (TP)**: Exit when price reaches the target profit percentage
     2. **Stop Loss (SL)**: Exit when price falls below the stop loss percentage
-    3. **Re-Entry**: After exit, wait for the same alignment condition to occur again
+    3. **Exit Conditions (Only after T+2 days)**: Share buying ke 2 days baad hi TP/SL check hoga (CDSL Rule).
+    4. **Re-Entry**: After exit, wait for the same alignment condition to occur again
     
     #### ⏰ Timeframe Options
     - **Daily**: SMAs calculated on daily candles
@@ -301,12 +302,16 @@ if st.button("Run Backtest", type="primary"):
             if position:
                 entry_price = position['entry_price']
                 
-                # Calculate TP and SL prices
-                tp_price = entry_price * (1 + TAKE_PROFIT_PCT / 100)
-                sl_price = entry_price * (1 - STOP_LOSS_PCT / 100)
+                # Check Exit Conditions (Only after T+2 days)
+                duration_days = (current_date - position['entry_date']).days
                 
                 exit_action = None
                 exit_price = 0
+                
+                if duration_days >= 2:
+                    # Calculate TP and SL prices
+                    tp_price = entry_price * (1 + TAKE_PROFIT_PCT / 100)
+                    sl_price = entry_price * (1 - STOP_LOSS_PCT / 100)
                 
                 # Check for Stop Loss if enabled
                 if USE_STOP_LOSS:

@@ -95,8 +95,8 @@ with st.expander("📖 Strategy Description & Rules"):
     #### ⏰ Timeframe Options
     - **Daily, Weekly, Monthly** options are available. SMAs are calculated based on the selected timeframe.
     
-    #### 💡 T1 Day Selling Concept
-    - Ensuring a minimum holding period to simulate realistic trading restrictions where applicable.
+    #### 💡 Exit Conditions (Only after T+2 days)
+    - Ensuring a minimum holding period to simulate realistic trading restrictions where applicable (CDSL Rule).
     """)
 
 # --- Inputs ---
@@ -281,8 +281,9 @@ if st.button("Run Backtest", type="primary"):
                         exit_action = "SMA CROSS DOWN"
                 
                 if exit_signal:
-                    # T1 Selling Concept: Can't sell on same day of entry (in Daily timeframe)
-                    if TIMEFRAME == "Daily" and row['Date'].date() <= position['entry_date'].date():
+                    # Exit Conditions (Only after T+2 days)
+                    duration_days = (row['Date'] - position['entry_date']).days
+                    if duration_days < 2:
                         continue
                         
                     pnl = float(round((exit_price - position['entry_price']) * position['quantity'] - CHARGES_PER_TRADE, 2))

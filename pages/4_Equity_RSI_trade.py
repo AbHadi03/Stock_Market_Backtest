@@ -84,6 +84,7 @@ with st.expander("📖 Strategy Description"):
     - **Concept**: Relative Strength Index (RSI) Mean Reversion.
     - **Entry**: Buy when RSI < Buy Level (Over sold area).
     - **Exit**: Sell when Price > Entry Price * (1 + Target %).
+    - **T+2 Rule**: Exit Conditions (Only after T+2 days).
     - **Goal**: Capture short-term bounces in oversold stocks.
     """)
 
@@ -177,7 +178,10 @@ if st.button("Run Backtest", type="primary"):
             for _, row in df.iterrows():
                 # EXIT
                 for trade in stock_open_trades.copy():
-                    if row["High"] >= trade["target_price"]:
+                    # Check Exit Conditions (Only after T+2 days)
+                    duration_days = (row["Date"] - trade["entry_date"]).days
+                    
+                    if duration_days >= 2 and row["High"] >= trade["target_price"]:
                         trade["exit_date"] = row["Date"]
                         trade["exit_price"] = trade["target_price"]
                         gross_pnl = trade["quantity"] * (trade["exit_price"] - trade["entry_price"])
